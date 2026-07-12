@@ -310,9 +310,12 @@ function App() {
         setAppState('confirmed');
       } else if (data.registration) {
         setAppState('pending');
+        if (opts.manual) push('No match yet — we are still finding the right table for you.', 'success');
       } else {
         setAppState('form');
+        if (opts.manual) push('You are signed in, but have not registered for matching yet.', 'success');
       }
+      if (opts.manual && data.registration?.status === 'matched') push('Your table is ready — review and confirm your spot.', 'success');
       return data;
     } catch (err) {
       localStorage.removeItem(AUTH_KEY);
@@ -388,7 +391,12 @@ function App() {
         <a className="brand" href="#top"><span>6</span>DinnerSix</a>
         <div className="nav-links"><a href="#how">How it works</a><a href="#signup">Register</a></div>
         <div className="nav-right">
-          {user?.email ? <button className="auth-pill" onClick={() => loadStatus(authToken, { manual: true })}><span>Signed in</span><strong>{user.email}</strong></button> : <a className="nav-cta" href="#signup">Sign in</a>}
+          {user?.email ? (
+            <>
+              <button className="auth-pill" onClick={() => loadStatus(authToken, { manual: true })}><span>Signed in</span><strong>{user.email}</strong></button>
+              <button className="nav-signout" onClick={signOut}>Sign out</button>
+            </>
+          ) : <a className="nav-cta" href="#signup">Sign in</a>}
         </div>
       </nav>
 
@@ -441,11 +449,11 @@ function App() {
           {appState === 'matched' && matchData && <MatchSection match={matchData} registrationId={registration?.id} token={authToken} onConfirm={handleConfirmed} onReset={() => setAppState('pending')} push={push} />}
 
           <section className="section restaurant">
-            <div><p className="eyebrow">For restaurants</p><h2>Fill quieter nights with curated tables.</h2><p>Partner restaurants get predictable group bookings and guests who arrive primed for a shared dining experience — with only the booking details needed to host well.</p></div>
+            <div><p className="eyebrow">For restaurants</p><h2>Fill quieter nights with curated tables.</h2><p>Partner restaurants get predictable group bookings and guests who arrive primed for a shared dining experience.</p></div>
             <div className="restaurant-cards">
               <article><strong>Curated</strong><span>personality-matched groups</span></article>
               <article><strong>6 seats</strong><span>average per matched booking</span></article>
-              <article><strong>Privacy-first</strong><span>only practical booking details</span></article>
+              <article><strong>Booking-ready</strong><span>clear group details</span></article>
             </div>
           </section>
 
