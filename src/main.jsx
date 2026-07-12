@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-const API = import.meta.env.VITE_API_BASE || (import.meta.env.DEV ? 'http://127.0.0.1:8789' : '');
+const API = import.meta.env.VITE_API_BASE || 'https://dinner-six-backend.shijanhoo.workers.dev';
 const AUTH_KEY = 'dinnerSixAuthToken';
 
 const TOPICS = ['Food', 'Travel', 'Startups', 'Books', 'Fitness', 'Music', 'AI', 'Culture', 'Comedy', 'Social impact', 'Gaming', 'Architecture'];
