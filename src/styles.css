@@ -84,7 +84,7 @@ h3 { font-size: 1.5rem; line-height: 1.08; }
 
 .signin-card { display: grid; gap: 16px; }
 .signin-form { display: grid; gap: 14px; }
-.dev-code { margin: -2px 0 0; color: var(--ink-2); background: #fff4f8; border: 1px dashed #ffc1d6; border-radius: var(--radius-sm); padding: 10px 12px; }
+.google-button { width: 100%; }
 .signed-email { background: #fff4f8; border: 1px solid #ffc1d6; border-radius: 999px; padding: 10px 14px; font-weight: 750; color: var(--ink-2); }
 .signup-wrap { display: flex; flex-direction: column; gap: 24px; }
 .step-progress { position: relative; display: flex; justify-content: space-between; align-items: flex-start; padding: 0 8px; }

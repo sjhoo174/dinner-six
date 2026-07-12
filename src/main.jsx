@@ -82,71 +82,20 @@ function Metric({ title, rows }) {
   );
 }
 
-function SignInPanel({ onSignedIn, push }) {
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
-  const [devCode, setDevCode] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function start(e) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const data = await requestJson('/auth/start', {
-        method: 'POST',
-        body: JSON.stringify({ email }),
-      });
-      setSent(true);
-      setDevCode(data.devCode || '');
-      push('Sign-in code sent. Enter it below to continue.', 'success');
-    } catch (err) {
-      push(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function verify(e) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const data = await requestJson('/auth/verify', {
-        method: 'POST',
-        body: JSON.stringify({ email, code }),
-      });
-      localStorage.setItem(AUTH_KEY, data.token);
-      onSignedIn(data.token, data.user, data.registration || null);
-      push('You are signed in. You can now register for a table.', 'success');
-    } catch (err) {
-      push(err.message);
-    } finally {
-      setLoading(false);
-    }
+function SignInPanel() {
+  function startGoogleSignIn() {
+    const returnTo = `${window.location.origin}${window.location.pathname}`;
+    window.location.href = api(`/auth/google/start?return_to=${encodeURIComponent(returnTo)}`);
   }
 
   return (
     <div className="signin-card">
-      <p className="eyebrow">Email sign-in required</p>
-      <h3>Sign in before registering.</h3>
-      <p>Your registration is tied to your email account, not stored as the source of truth on this device.</p>
-      {!sent ? (
-        <form onSubmit={start} className="signin-form">
-          <label>Email address
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
-          </label>
-          <button className="button primary" disabled={loading}>{loading ? 'Sending…' : 'Send sign-in code'}</button>
-        </form>
-      ) : (
-        <form onSubmit={verify} className="signin-form">
-          <label>Verification code
-            <input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" placeholder="6-digit code" required />
-          </label>
-          {devCode && <p className="dev-code">Local dev code: <strong>{devCode}</strong></p>}
-          <button className="button primary" disabled={loading}>{loading ? 'Verifying…' : 'Verify and continue'}</button>
-          <button type="button" className="text-button" onClick={() => { setSent(false); setCode(''); }}>Use a different email</button>
-        </form>
-      )}
+      <p className="eyebrow">Google sign-in required</p>
+      <h3>Sign in with Gmail before registering.</h3>
+      <p>Your registration and matching status are tied to your Google email account.</p>
+      <button className="button primary google-button" onClick={startGoogleSignIn}>
+        Continue with Google
+      </button>
     </div>
   );
 }
@@ -177,7 +126,7 @@ function PendingScreen({ user, registration, checking, onCheck, onSignOut }) {
           <span>{registration?.profile?.night || 'Preferred night'}</span>
         </div>
         <p className="pending-note">
-          Your registration is tagged to your email. Sign in with the same email later to see the latest status.
+          Your registration is stored with your Google email. Sign in with the same account later to see the latest status.
         </p>
         <div className="pending-actions">
           <button className="button primary" onClick={onCheck} disabled={checking}>{checking ? 'Checking…' : 'Check status now'}</button>
@@ -293,7 +242,7 @@ function SignupForm({ user, onSubmit, loading }) {
         {step === 0 && (
           <div className="form-step">
             <label>Full name<input value={form.name} onChange={e => update('name', e.target.value)} placeholder="Your name" required /></label>
-            <label>Phone (optional)<input type="tel" value={form.phone} onChange={e => update('phone', e.target.value)} placeholder="+65 9123 4567" /></label>
+            <label>Phone number<input type="tel" value={form.phone} onChange={e => update('phone', e.target.value)} placeholder="+65 9123 4567" required /></label>
             <label>Gender<select value={form.gender} onChange={e => update('gender', e.target.value)}>{['Female','Male','Non-binary','Prefer not to say'].map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Age<input type="number" min="18" max="80" value={form.age} onChange={e => update('age', e.target.value)} required /></label>
             <label>Industry<select value={form.industry} onChange={e => update('industry', e.target.value)}>{['Tech','Finance','Product','Design','Marketing','Healthcare','Education','Law','Hospitality','Engineering','Founder','Student'].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -383,15 +332,23 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const token = hash.get('auth_token');
+    const error = hash.get('auth_error');
+    if (token) {
+      localStorage.setItem(AUTH_KEY, token);
+      setAuthToken(token);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      push('You are signed in with Google. You can now register for a table.', 'success');
+    } else if (error) {
+      push(decodeURIComponent(error));
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, [push]);
+
+  useEffect(() => {
     loadStatus(authToken);
   }, [authToken, loadStatus]);
-
-  function handleSignedIn(token, nextUser, nextRegistration) {
-    setAuthToken(token);
-    setUser(nextUser);
-    setRegistration(nextRegistration);
-    setAppState(nextRegistration ? nextRegistration.status === 'matched' ? 'matched' : 'pending' : 'form');
-  }
 
   async function handleFormSubmit(form) {
     setFormLoading(true);
@@ -443,11 +400,11 @@ function App() {
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
-              <p className="eyebrow">Email-verified dinner matching · Singapore</p>
+              <p className="eyebrow">Dinner matching · Singapore</p>
               <h1>Meet five interesting strangers over dinner.</h1>
-              <p className="lead">DinnerSix matches compatible people into tables of 5–6 for dinner, drinks, and real conversation. Sign in with email, share your preferences, then check back when your table is ready.</p>
-              <div className="hero-actions"><a className="button primary" href="#signup">Start with email sign-in</a><a className="button secondary" href="#how">See how it works</a></div>
-              <div className="trust"><span>Email sign-in required</span><span>Area + budget preferences</span><span>5–6 person tables</span><span>No need to wait online</span></div>
+              <p className="lead">DinnerSix matches compatible people into tables of 5–6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.</p>
+              <div className="hero-actions"><a className="button primary" href="#signup">Continue with Google</a><a className="button secondary" href="#how">See how it works</a></div>
+              <div className="trust"><span>Google sign-in required</span><span>Area + budget preferences</span><span>5–6 person tables</span><span>No need to wait online</span></div>
             </div>
             <div className="phone-card">
               <div className="phone-top"><span>Sample table</span><strong>{previewMatch.compatibility}% fit</strong></div>
@@ -457,7 +414,7 @@ function App() {
           </section>
 
           <section className="stats">
-            <div><strong>Email</strong><span>sign-in before registration</span></div>
+            <div><strong>Email</strong><span>Google sign-in before registration</span></div>
             <div><strong>Area</strong><span>east, west, central and more</span></div>
             <div><strong>Budget</strong><span>matched to your range</span></div>
             <div><strong>5–6</strong><span>people per table</span></div>
@@ -466,19 +423,19 @@ function App() {
           <section className="section" id="how">
             <div className="section-head"><p className="eyebrow">How it works</p><h2>Sign in, register preferences, then return when matched.</h2></div>
             <div className="steps">
-              <article><span>01</span><h3>Sign in with email</h3><p>Verify your email first so your registration and status are tied to your account.</p></article>
+              <article><span>01</span><h3>Sign in with Google</h3><p>Use your Google account first so your registration and status are tied to your email.</p></article>
               <article><span>02</span><h3>Share your dinner fit</h3><p>Tell us your area, budget, dietary needs, social energy, and conversation topics.</p></article>
-              <article><span>03</span><h3>Confirm when ready</h3><p>Matching can take a few days. Sign in with the same email later to see and confirm your table.</p></article>
+              <article><span>03</span><h3>Confirm when ready</h3><p>Matching can take a few days. Sign in with the same Google account later to see and confirm your table.</p></article>
             </div>
           </section>
 
           <section className="section split" id="signup">
             <div>
               <p className="eyebrow">Registration</p>
-              <h2>{user ? 'Register your dinner preferences.' : 'Start with email sign-in.'}</h2>
-              <p>{user ? 'Your registration is stored with your signed-in email so you can return later from any device.' : 'We will verify your email before showing the registration form.'}</p>
+              <h2>{user ? 'Register your dinner preferences.' : 'Continue with Google.'}</h2>
+              <p>{user ? 'Your registration is stored with your signed-in email so you can return later from any device.' : 'Use Google sign-in before the registration form is shown.'}</p>
             </div>
-            {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} /> : <SignInPanel onSignedIn={handleSignedIn} push={push} />}
+            {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} /> : <SignInPanel />}
           </section>
 
           {appState === 'matched' && matchData && <MatchSection match={matchData} registrationId={registration?.id} token={authToken} onConfirm={handleConfirmed} onReset={() => setAppState('pending')} push={push} />}
