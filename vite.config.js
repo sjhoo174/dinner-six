@@ -5,12 +5,5 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '127.0.0.1',
-    proxy: {
-      // In local dev, forward /api/* → Express backend on :3001
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
-    },
   },
 });
