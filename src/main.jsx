@@ -361,6 +361,27 @@ function RejectedScreen({ retryAt, checking, onCheck, onSignOut }) {
   );
 }
 
+function GuestList({ group }) {
+  return (
+    <div className="guest-list">
+      {group.map(p => (
+        <article key={`${p.name}-${p.industry}`} className={p.isUser ? 'you' : ''}>
+          <div className="guest-avatar">{p.isUser ? 'You' : p.name[0]}</div>
+          <div>
+            <h4>{p.name}</h4>
+            <p>{p.persona} · {p.industry} · {p.gender}</p>
+            <span>{p.vibe} · {p.energy}</span>
+            {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
+            <span className={`confirm-badge ${p.confirmed ? 'confirmed' : 'pending'}`}>
+              {p.confirmed ? '✓ Confirmed' : 'Pending confirmation'}
+            </span>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function ConfirmedScreen({ match, token, push, onSignOut }) {
   return (
     <div className="confirmed-screen">
@@ -371,6 +392,10 @@ function ConfirmedScreen({ match, token, push, onSignOut }) {
         <p className="confirmed-perk">✨ {match.restaurant.perk}</p>
         <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
         <AttendanceSelector match={match} token={token} push={push} />
+        <div className="confirmed-guests">
+          <h3>Who's coming</h3>
+          <GuestList group={match.group} />
+        </div>
         <RatingPanel match={match} token={token} push={push} />
         <button className="button secondary" onClick={onSignOut}>Sign out</button>
       </div>
@@ -433,19 +458,7 @@ function MatchSection({ match, registrationId, token, onConfirm, onReject, push 
           <Metric title="Industries" rows={industries} />
           <Metric title="Personas" rows={personas} />
         </div>
-        <div className="guest-list">
-          {match.group.map(p => (
-            <article key={`${p.name}-${p.industry}`} className={p.isUser ? 'you' : ''}>
-              <div className="guest-avatar">{p.isUser ? 'You' : p.name[0]}</div>
-              <div>
-                <h4>{p.name}</h4>
-                <p>{p.persona} · {p.industry} · {p.gender}</p>
-                <span>{p.vibe} · {p.energy}</span>
-                {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
-              </div>
-            </article>
-          ))}
-        </div>
+        <GuestList group={match.group} />
       </div>
       <div className="confirm-strip">
         <button className="button primary" onClick={handleConfirm} disabled={confirming || rejecting}>{confirming ? 'Confirming…' : 'Confirm my spot 🍽️'}</button>
