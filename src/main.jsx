@@ -24,7 +24,7 @@ const REJECT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const DINNER_TYPES = {
   social: {
     label: 'Social Dining',
-    eyebrow: 'Algorithmic dinner matching · Singapore',
+    eyebrow: 'Dinner matching · Singapore',
     headline: 'Meet 4 to 6 interesting strangers over dinner.',
     lead: 'DinnerSix uses a matching algorithm to group compatible people into tables of 4-6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.',
     trust: ['Google sign-in required', 'Area + budget preferences', '4-6 person tables'],
@@ -32,7 +32,7 @@ const DINNER_TYPES = {
   },
   professional: {
     label: 'Professional Networking',
-    eyebrow: 'Algorithmic networking dinners · Singapore',
+    eyebrow: 'Networking dinners · Singapore',
     headline: 'Build real industry connections over dinner.',
     lead: 'DinnerSix Professional matches you into curated tables of 4-6 driven professionals for purposeful networking — no name tags, no small-talk circles, just dinner with people worth knowing.',
     trust: ['Google sign-in required', 'Industry-aware matching', '4-6 person tables'],
