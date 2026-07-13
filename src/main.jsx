@@ -624,7 +624,7 @@ function App() {
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
-              <p className="eyebrow">Algorithmic dinner matching · Singapore</p>
+              <p className="eyebrow">Dinner matching · Singapore</p>
               <h1>Meet 4 to 6 interesting strangers over dinner.</h1>
               <p className="lead">DinnerSix uses a matching algorithm to group compatible people into tables of 4-6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.</p>
               <div className="hero-actions"><a className="button primary" href="#signup">Continue with Google</a><a className="button secondary" href="#how">See how it works</a></div>
