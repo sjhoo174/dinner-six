@@ -1,19 +1,29 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE || 'https://dinner-six-backend.shijanhoo.workers.dev';
 const AUTH_KEY = 'dinnerSixAuthToken';
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
 
 const TOPICS = ['Food', 'Travel', 'Startups', 'Books', 'Fitness', 'Music', 'AI', 'Culture', 'Comedy', 'Social impact', 'Gaming', 'Architecture'];
 const AREAS = ['Central', 'East', 'West', 'North', 'North-East', 'CBD'];
 const BUDGETS = ['$25-$35', '$35-$50', '$50-$70', '$70+'];
+const ALCOHOLS = ['Non-drinker', 'Social drinker', 'Drinks freely'];
+const LANGUAGES = ['English', 'Mandarin', 'Malay', 'Tamil', 'Other'];
+const SMOKING = ['Non-smoker', 'Smoker', 'No preference'];
 const STEPS = ['About you', 'Preferences', 'Dinner fit'];
+const ATTENDANCE_OPTIONS = [
+  { value: 'on_time', label: 'On time' },
+  { value: 'late', label: 'Running late' },
+  { value: 'not_showing', label: "Can't make it" },
+];
 
 const initialForm = {
   name: '', phone: '', gender: 'Female', age: '28', industry: 'Tech',
   vibe: 'Deep talks', energy: 'Balanced', topics: ['Food', 'Travel', 'Startups'],
   area: 'Central', budget: '$35-$50', diet: 'No restrictions', night: 'Thursday',
+  alcohol: 'Social drinker', language: 'English', smoking: 'Non-smoker',
 };
 
 function api(path) {
@@ -82,6 +92,152 @@ function Metric({ title, rows }) {
   );
 }
 
+function formatCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+}
+
+function EventCountdown({ eventAt, eventEndsAt }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!eventAt) return null;
+  const start = new Date(eventAt).getTime();
+  const end = eventEndsAt ? new Date(eventEndsAt).getTime() : null;
+  if (now < start) {
+    return (
+      <div className="event-countdown">
+        <span>Your table starts in</span>
+        <strong>{formatCountdown(start - now)}</strong>
+      </div>
+    );
+  }
+  if (end && now < end) {
+    return (
+      <div className="event-countdown live">
+        <span>Your table is happening now</span>
+      </div>
+    );
+  }
+  return null;
+}
+
+function AttendanceSelector({ match, token, push }) {
+  const me = match.group.find(p => p.isUser);
+  const [status, setStatus] = useState(me?.attendanceStatus || 'unknown');
+  const [saving, setSaving] = useState(false);
+  const past = Boolean(match.eventAt) && Date.now() >= new Date(match.eventAt).getTime();
+
+  async function setAttendance(value) {
+    setSaving(true);
+    try {
+      await requestJson('/attendance', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, status: value }) });
+      setStatus(value);
+      push('Attendance updated.', 'success');
+    } catch (err) {
+      push(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="attendance-selector">
+      <span>Will you be there?</span>
+      <div className="attendance-buttons">
+        {ATTENDANCE_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            className={status === opt.value ? 'active' : ''}
+            disabled={saving || past}
+            onClick={() => setAttendance(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {past && <p className="pending-note">Attendance can no longer be changed once the event has started.</p>}
+    </div>
+  );
+}
+
+function RatingPanel({ match, token, push }) {
+  const [drafts, setDrafts] = useState({});
+  const [submitted, setSubmitted] = useState({});
+  const [loaded, setLoaded] = useState(false);
+  const tablemates = match.group.filter(p => !p.isUser);
+  const eligible = Boolean(match.ratingWindowOpensAt) && Date.now() >= new Date(match.ratingWindowOpensAt).getTime();
+
+  useEffect(() => {
+    if (!eligible) return;
+    requestJson(`/ratings/mine?groupId=${encodeURIComponent(match.groupId)}`, { token })
+      .then(data => {
+        const map = {};
+        (data.ratings || []).forEach(r => { map[r.rateeRegistrationId] = r; });
+        setSubmitted(map);
+      })
+      .finally(() => setLoaded(true));
+  }, [eligible, match.groupId, token]);
+
+  if (!eligible) return null;
+
+  function updateDraft(id, field, value) {
+    setDrafts(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
+  }
+
+  async function submitRating(registrationId) {
+    const draft = drafts[registrationId] || {};
+    if (!draft.rating) return;
+    try {
+      const data = await requestJson('/ratings', {
+        token, method: 'POST',
+        body: JSON.stringify({ groupId: match.groupId, rateeRegistrationId: registrationId, rating: Number(draft.rating), comment: draft.comment || '' }),
+      });
+      setSubmitted(prev => ({ ...prev, [registrationId]: data.rating }));
+      push('Rating submitted.', 'success');
+    } catch (err) {
+      push(err.message);
+    }
+  }
+
+  return (
+    <div className="rating-panel">
+      <h3>Rate your table</h3>
+      <p>Ratings help us improve future matches. This opens 3 hours after your table ends.</p>
+      {!loaded && <p className="pending-note">Loading your ratings…</p>}
+      {loaded && tablemates.map(p => (
+        <div className="rating-row" key={p.registrationId}>
+          <span>{p.name}</span>
+          {submitted[p.registrationId] ? (
+            <strong>✓ Rated {submitted[p.registrationId].rating}/5</strong>
+          ) : (
+            <div className="star-input">
+              <select value={drafts[p.registrationId]?.rating || ''} onChange={e => updateDraft(p.registrationId, 'rating', e.target.value)}>
+                <option value="">Rate 1-5</option>
+                {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+              <input
+                type="text"
+                placeholder="Optional comment"
+                value={drafts[p.registrationId]?.comment || ''}
+                onChange={e => updateDraft(p.registrationId, 'comment', e.target.value)}
+              />
+              <button type="button" className="button secondary" disabled={!drafts[p.registrationId]?.rating} onClick={() => submitRating(p.registrationId)}>Submit</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SignInPanel() {
   function startGoogleSignIn() {
     const returnTo = `${window.location.origin}${window.location.pathname}`;
@@ -107,8 +263,9 @@ function PendingScreen({ user, registration, checking, onCheck, onSignOut }) {
         <p className="eyebrow">Registration received</p>
         <h2>Your table request is in the queue.</h2>
         <p>
-          Matching can take a few days while we gather the right 5–6 people for your area, budget,
-          dietary needs, and conversation style. You do not need to wait on this website.
+          Matching can take a few days while our algorithm gathers the right 4-6 people for your area,
+          budget, dietary needs, and conversation style. We'll show your table, restaurant, and event
+          time here as soon as it's ready.
         </p>
         <div className="status-grid two">
           <div>
@@ -137,7 +294,7 @@ function PendingScreen({ user, registration, checking, onCheck, onSignOut }) {
   );
 }
 
-function ConfirmedScreen({ match, onReset }) {
+function ConfirmedScreen({ match, token, push, onReset }) {
   return (
     <div className="confirmed-screen">
       <div className="confirmed-inner">
@@ -145,6 +302,9 @@ function ConfirmedScreen({ match, onReset }) {
         <h2>You're confirmed!</h2>
         <p>See you at <strong>{match.restaurant.name}</strong> in {match.restaurant.area}.</p>
         <p className="confirmed-perk">✨ {match.restaurant.perk}</p>
+        <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
+        <AttendanceSelector match={match} token={token} push={push} />
+        <RatingPanel match={match} token={token} push={push} />
         <button className="button primary" onClick={onReset}>Back to status</button>
       </div>
     </div>
@@ -185,7 +345,11 @@ function MatchSection({ match, registrationId, token, onConfirm, onReset, push }
           <p>{match.restaurant.cuisine}</p>
           <div className="perk-badge">✨ {match.restaurant.perk}</div>
           <p className="venue">📍 {match.restaurant.area}</p>
-          <div className="compat-score"><strong>{match.compatibility}%</strong><span>compatibility score</span></div>
+          {match.compatibility != null && (
+            <div className="compat-score"><strong>{match.compatibility}%</strong><span>compatibility score</span></div>
+          )}
+          <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
+          <AttendanceSelector match={match} token={token} push={push} />
         </div>
         <div className="insights">
           <h3>Who's turning up?</h3>
@@ -217,6 +381,9 @@ function MatchSection({ match, registrationId, token, onConfirm, onReset, push }
 function SignupForm({ user, onSubmit, loading }) {
   const [form, setForm] = useState(initialForm);
   const [step, setStep] = useState(0);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef(null);
+  const widgetIdRef = useRef(null);
 
   function update(name, value) { setForm(p => ({ ...p, [name]: value })); }
   function toggleTopic(t) {
@@ -224,7 +391,41 @@ function SignupForm({ user, onSubmit, loading }) {
   }
   function next(e) { e.preventDefault(); setStep(s => Math.min(s + 1, STEPS.length - 1)); }
   function back() { setStep(s => Math.max(s - 1, 0)); }
-  function handleSubmit(e) { e.preventDefault(); onSubmit(form); }
+
+  function resetTurnstile() {
+    setTurnstileToken('');
+    if (widgetIdRef.current != null) window.turnstile?.reset(widgetIdRef.current);
+  }
+
+  useEffect(() => {
+    if (step !== 2 || !turnstileRef.current) return undefined;
+    let cancelled = false;
+    let widgetId;
+    function render() {
+      if (cancelled || !window.turnstile || !turnstileRef.current) return;
+      widgetId = window.turnstile.render(turnstileRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: t => setTurnstileToken(t),
+        'expired-callback': () => setTurnstileToken(''),
+        'error-callback': () => setTurnstileToken(''),
+      });
+      widgetIdRef.current = widgetId;
+    }
+    let pollId;
+    if (window.turnstile) render();
+    else pollId = setInterval(() => { if (window.turnstile) { render(); clearInterval(pollId); } }, 200);
+    return () => {
+      cancelled = true;
+      if (pollId) clearInterval(pollId);
+      if (widgetId != null) window.turnstile?.remove(widgetId);
+    };
+  }, [step]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const ok = await onSubmit({ ...form, turnstileToken });
+    if (!ok) resetTurnstile();
+  }
 
   return (
     <div className="signup-wrap">
@@ -243,7 +444,7 @@ function SignupForm({ user, onSubmit, loading }) {
           <div className="form-step">
             <label>Full name<input value={form.name} onChange={e => update('name', e.target.value)} placeholder="Your name" required /></label>
             <label>Phone number<input type="tel" value={form.phone} onChange={e => update('phone', e.target.value)} placeholder="+65 9123 4567" required /></label>
-            <label>Gender<select value={form.gender} onChange={e => update('gender', e.target.value)}>{['Female','Male','Non-binary','Prefer not to say'].map(x => <option key={x}>{x}</option>)}</select></label>
+            <label>Gender<select value={form.gender} onChange={e => update('gender', e.target.value)}>{['Female','Male'].map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Age<input type="number" min="18" max="80" value={form.age} onChange={e => update('age', e.target.value)} required /></label>
             <label>Industry<select value={form.industry} onChange={e => update('industry', e.target.value)}>{['Tech','Finance','Product','Design','Marketing','Healthcare','Education','Law','Hospitality','Engineering','Founder','Student'].map(x => <option key={x}>{x}</option>)}</select></label>
           </div>
@@ -254,6 +455,8 @@ function SignupForm({ user, onSubmit, loading }) {
             <label>Dinner budget per person<select value={form.budget} onChange={e => update('budget', e.target.value)}>{BUDGETS.map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Conversation vibe<select value={form.vibe} onChange={e => update('vibe', e.target.value)}>{['Deep talks','Playful banter','New ideas'].map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Social energy<select value={form.energy} onChange={e => update('energy', e.target.value)}>{['Calm','Balanced','Outgoing'].map(x => <option key={x}>{x}</option>)}</select></label>
+            <label>Alcohol preference<select value={form.alcohol} onChange={e => update('alcohol', e.target.value)}>{ALCOHOLS.map(x => <option key={x}>{x}</option>)}</select></label>
+            <label>Preferred language<select value={form.language} onChange={e => update('language', e.target.value)}>{LANGUAGES.map(x => <option key={x}>{x}</option>)}</select></label>
             <div className="topic-box"><span>Pick up to 5 topics you enjoy</span>{TOPICS.map(t => <button type="button" key={t} className={form.topics.includes(t) ? 'selected' : ''} onClick={() => toggleTopic(t)}>{t}</button>)}</div>
           </div>
         )}
@@ -261,16 +464,27 @@ function SignupForm({ user, onSubmit, loading }) {
           <div className="form-step">
             <label>Dietary needs<select value={form.diet} onChange={e => update('diet', e.target.value)}>{['No restrictions','Vegetarian','Halal-friendly','No pork','No beef','No seafood'].map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Preferred night<select value={form.night} onChange={e => update('night', e.target.value)}>{['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(x => <option key={x}>{x}</option>)}</select></label>
+            <label>Smoking preference<select value={form.smoking} onChange={e => update('smoking', e.target.value)}>{SMOKING.map(x => <option key={x}>{x}</option>)}</select></label>
             <div className="review-box">
               <span>Preference summary</span>
               <strong>{form.area} · {form.budget} · {form.night}</strong>
-              <p>{form.vibe}, {form.energy.toLowerCase()} energy, {form.diet.toLowerCase()}.</p>
+              <p>{form.vibe}, {form.energy.toLowerCase()} energy, {form.diet.toLowerCase()}, {form.alcohol.toLowerCase()}, {form.language}.</p>
+            </div>
+            <div className="turnstile-box">
+              <span>Quick human check</span>
+              <div ref={turnstileRef} />
             </div>
           </div>
         )}
         <div className="form-nav">
           {step > 0 && <button type="button" className="button secondary" onClick={back}>← Back</button>}
-          <button type="submit" className="button primary" disabled={loading}>{step < STEPS.length - 1 ? 'Continue →' : loading ? 'Registering…' : 'Register for matching'}</button>
+          <button
+            type="submit"
+            className="button primary"
+            disabled={loading || (step === STEPS.length - 1 && !turnstileToken)}
+          >
+            {step < STEPS.length - 1 ? 'Continue →' : loading ? 'Registering…' : 'Register for matching'}
+          </button>
         </div>
       </form>
     </div>
@@ -362,8 +576,10 @@ function App() {
       setMatchData(data.registration.match || null);
       push('Registration submitted. It is now tagged to your signed-in email.', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
     } catch (err) {
       push(err.message);
+      return false;
     } finally {
       setFormLoading(false);
     }
@@ -402,17 +618,17 @@ function App() {
 
       {appState === 'loading' && <section className="section pending-panel"><div className="pending-card"><h2>Loading DinnerSix…</h2></div></section>}
       {appState === 'pending' && <PendingScreen user={user} registration={registration} checking={checkingStatus} onCheck={() => loadStatus(authToken, { manual: true })} onSignOut={signOut} />}
-      {appState === 'confirmed' && matchData && <ConfirmedScreen match={matchData} onReset={() => setAppState('pending')} />}
+      {appState === 'confirmed' && matchData && <ConfirmedScreen match={matchData} token={authToken} push={push} onReset={() => setAppState('pending')} />}
 
       {(appState === 'signedOut' || appState === 'form' || appState === 'matched') && (
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
-              <p className="eyebrow">Dinner matching · Singapore</p>
-              <h1>Meet five interesting strangers over dinner.</h1>
-              <p className="lead">DinnerSix matches compatible people into tables of 5–6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.</p>
+              <p className="eyebrow">Algorithmic dinner matching · Singapore</p>
+              <h1>Meet 4 to 6 interesting strangers over dinner.</h1>
+              <p className="lead">DinnerSix uses a matching algorithm to group compatible people into tables of 4-6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.</p>
               <div className="hero-actions"><a className="button primary" href="#signup">Continue with Google</a><a className="button secondary" href="#how">See how it works</a></div>
-              <div className="trust"><span>Google sign-in required</span><span>Area + budget preferences</span><span>5–6 person tables</span><span>No need to wait online</span></div>
+              <div className="trust"><span>Google sign-in required</span><span>Area + budget preferences</span><span>4-6 person tables</span></div>
             </div>
             <div className="phone-card">
               <div className="phone-top"><span>Sample table</span><strong>{previewMatch.compatibility}% fit</strong></div>
@@ -425,7 +641,7 @@ function App() {
             <div><strong>Email</strong><span>Google sign-in before registration</span></div>
             <div><strong>Area</strong><span>east, west, central and more</span></div>
             <div><strong>Budget</strong><span>matched to your range</span></div>
-            <div><strong>5–6</strong><span>people per table</span></div>
+            <div><strong>4-6</strong><span>people per table</span></div>
           </section>
 
           <section className="section" id="how">
@@ -433,7 +649,7 @@ function App() {
             <div className="steps">
               <article><span>01</span><h3>Sign in with Google</h3><p>Use your Google account first so your registration and status are tied to your email.</p></article>
               <article><span>02</span><h3>Share your dinner fit</h3><p>Tell us your area, budget, dietary needs, social energy, and conversation topics.</p></article>
-              <article><span>03</span><h3>Confirm when ready</h3><p>Matching can take a few days. Sign in with the same Google account later to see and confirm your table.</p></article>
+              <article><span>03</span><h3>Confirm when ready</h3><p>Our matching algorithm scores compatibility across everyone's preferences and forms your table automatically — no manual curation. Sign in with the same Google account later to see your table, restaurant, and event time.</p></article>
             </div>
           </section>
 
@@ -452,8 +668,7 @@ function App() {
             <div><p className="eyebrow">For restaurants</p><h2>Fill quieter nights with curated tables.</h2><p>Partner restaurants get predictable group bookings and guests who arrive primed for a shared dining experience.</p></div>
             <div className="restaurant-cards">
               <article><strong>Curated</strong><span>personality-matched groups</span></article>
-              <article><strong>6 seats</strong><span>average per matched booking</span></article>
-              <article><strong>Booking-ready</strong><span>clear group details</span></article>
+              <article><strong>4-6 seats</strong><span>average per matched booking</span></article>
             </div>
           </section>
 

@@ -111,6 +111,26 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .review-box strong { font-size: 1.1rem; }
 .review-box p { width: 100%; margin: 0; }
 .form-nav { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 12px; padding-top: 6px; }
+.turnstile-box { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; }
+.turnstile-box span { font-weight: 850; }
+
+.event-countdown { display: flex; flex-direction: column; gap: 4px; margin: 16px 0; padding: 14px 16px; background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.event-countdown span { color: var(--muted); font-weight: 750; font-size: .85rem; }
+.event-countdown strong { font-size: 1.3rem; letter-spacing: -.03em; }
+.event-countdown.live strong, .event-countdown.live span { color: #00a878; font-weight: 850; }
+
+.attendance-selector { margin: 16px 0; }
+.attendance-selector > span { display: block; font-weight: 850; margin-bottom: 10px; }
+.attendance-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.attendance-buttons button { border: 1.5px solid var(--line); border-radius: 999px; background: var(--soft); color: var(--muted); padding: 9px 16px; font-weight: 800; font-size: .88rem; cursor: pointer; }
+.attendance-buttons button.active { background: var(--ink); color: white; border-color: var(--ink); }
+.attendance-buttons button:disabled { opacity: .5; cursor: not-allowed; }
+
+.rating-panel { margin-top: 24px; text-align: left; }
+.rating-panel h3 { margin-bottom: 6px; }
+.rating-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.star-input { display: flex; gap: 8px; align-items: center; }
+.star-input input[type="text"] { width: 160px; }
 
 .pending-panel { min-height: calc(100vh - 72px); display: grid; place-items: center; }
 .pending-card { width: min(920px, 100%); border: 1px solid var(--line); border-radius: 32px; padding: clamp(28px, 6vw, 56px); box-shadow: var(--shadow-lg); }
@@ -153,7 +173,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .confirmed-perk { color: #7a5800; font-weight: 700; font-size: .95rem; margin-top: 4px; }
 
 .restaurant { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
-.restaurant-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.restaurant-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .restaurant-cards strong { display: block; font-size: 1.8rem; letter-spacing: -.06em; color: var(--ink); }
 .restaurant-cards span { color: var(--muted); font-weight: 800; font-size: .88rem; }
 .toast-stack { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 10px; }

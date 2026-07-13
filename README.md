@@ -6,7 +6,7 @@ It lets users:
 
 - Sign up for free
 - Answer a short questionnaire
-- Get algorithmically grouped with 5-6 compatible strangers
+- Get algorithmically grouped with 4-6 compatible strangers
 - Preview who is turning up by persona, industry, and gender mix
 - See a partner restaurant and subsidised percentage discount
 - Store a demo match locally in the browser
