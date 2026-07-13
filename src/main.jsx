@@ -353,7 +353,9 @@ function RejectedScreen({ retryAt, checking, onCheck, onSignOut }) {
           <p className="pending-note">You can register again now — check your status to continue.</p>
         )}
         <div className="pending-actions">
-          <button className="button primary" onClick={onCheck} disabled={checking}>{checking ? 'Checking…' : 'Check status now'}</button>
+          {remaining <= 0 && (
+            <button className="button primary" onClick={onCheck} disabled={checking}>{checking ? 'Checking…' : 'Check status now'}</button>
+          )}
           <button className="button secondary" onClick={onSignOut}>Sign out</button>
         </div>
       </div>
@@ -602,18 +604,35 @@ function SignupForm({ user, onSubmit, loading, defaultDinnerType }) {
   );
 }
 
+function deriveTrackState(reg) {
+  if (!reg) return { appState: 'form', matchData: null };
+  if (reg.status === 'matched') return { appState: 'matched', matchData: reg.match };
+  if (reg.status === 'confirmed') return { appState: 'confirmed', matchData: reg.match };
+  if (reg.status === 'rejected') {
+    const retryAt = reg.rejectedAt ? new Date(reg.rejectedAt).getTime() + REJECT_COOLDOWN_MS : 0;
+    return Date.now() < retryAt ? { appState: 'rejected', matchData: null } : { appState: 'form', matchData: null };
+  }
+  return { appState: 'pending', matchData: null };
+}
+
 function App() {
   const [restaurants, setRestaurants] = useState([]);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem(AUTH_KEY));
   const [user, setUser] = useState(null);
-  const [registration, setRegistration] = useState(null);
-  const [appState, setAppState] = useState('loading');
-  const [matchData, setMatchData] = useState(null);
+  const [registrations, setRegistrations] = useState({ social: null, professional: null });
+  const [authStage, setAuthStage] = useState('loading');
   const [formLoading, setFormLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [dinnerType, setDinnerType] = useState('social');
   const { messages, push } = useToast();
   const dinnerTypeCopy = DINNER_TYPES[dinnerType];
+
+  // Each dinner type has its own independent registration/match/confirm/
+  // reject lifecycle; the toggle just selects which track is on screen.
+  const activeRegistration = registrations[dinnerType];
+  const track = deriveTrackState(activeRegistration);
+  const appState = authStage === 'ready' ? track.appState : authStage;
+  const matchData = track.matchData;
 
   const previewMatch = {
     compatibility: 91,
@@ -623,42 +642,33 @@ function App() {
   const avatarColors = ['#ff4f8b', '#6c47ff', '#92174d', '#428bff', '#00a878', '#222'];
 
   const loadStatus = useCallback(async (token = authToken, opts = {}) => {
-    if (!token) { setAppState('signedOut'); return null; }
+    if (!token) { setAuthStage('signedOut'); return null; }
     if (opts.manual) setCheckingStatus(true);
     try {
       const data = await requestJson('/me', { token, method: 'GET' });
       setUser(data.user);
-      setRegistration(data.registration || null);
-      if (data.registration?.status === 'matched') {
-        setMatchData(data.registration.match);
-        setAppState('matched');
-      } else if (data.registration?.status === 'confirmed') {
-        setMatchData(data.registration.match);
-        setAppState('confirmed');
-      } else if (data.registration?.status === 'rejected') {
-        const retryAt = data.registration.rejectedAt ? new Date(data.registration.rejectedAt).getTime() + REJECT_COOLDOWN_MS : 0;
-        setAppState(Date.now() < retryAt ? 'rejected' : 'form');
-      } else if (data.registration) {
-        setAppState('pending');
-        if (opts.manual) push('No match yet — we are still finding the right table for you.', 'success');
-      } else {
-        setAppState('form');
-        if (opts.manual) push('You are signed in, but have not registered for matching yet.', 'success');
+      const regs = data.registrations || { social: null, professional: null };
+      setRegistrations(regs);
+      setAuthStage('ready');
+      if (opts.manual) {
+        const reg = regs[dinnerType];
+        if (reg?.status === 'matched') push('Your table is ready — review and confirm your spot.', 'success');
+        else if (reg?.status === 'pending') push('No match yet — we are still finding the right table for you.', 'success');
+        else if (!reg) push('You are signed in, but have not registered for matching yet.', 'success');
       }
-      if (opts.manual && data.registration?.status === 'matched') push('Your table is ready — review and confirm your spot.', 'success');
       return data;
     } catch (err) {
       localStorage.removeItem(AUTH_KEY);
       setAuthToken(null);
       setUser(null);
-      setRegistration(null);
-      setAppState('signedOut');
+      setRegistrations({ social: null, professional: null });
+      setAuthStage('signedOut');
       if (opts.manual) push(err.message);
       return null;
     } finally {
       if (opts.manual) setCheckingStatus(false);
     }
-  }, [authToken, push]);
+  }, [authToken, dinnerType, push]);
 
   useEffect(() => {
     fetch(api('/restaurants')).then(r => r.json()).then(d => setRestaurants(d.restaurants || [])).catch(() => {});
@@ -687,9 +697,8 @@ function App() {
     setFormLoading(true);
     try {
       const data = await requestJson('/registrations', { token: authToken, method: 'POST', body: JSON.stringify(form) });
-      setRegistration(data.registration);
-      setAppState(data.registration.status === 'matched' ? 'matched' : 'pending');
-      setMatchData(data.registration.match || null);
+      setRegistrations(prev => ({ ...prev, [form.dinnerType]: data.registration }));
+      setDinnerType(form.dinnerType);
       push('Registration submitted. It is now tagged to your signed-in email.', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return true;
@@ -705,20 +714,21 @@ function App() {
     localStorage.removeItem(AUTH_KEY);
     setAuthToken(null);
     setUser(null);
-    setRegistration(null);
-    setMatchData(null);
-    setAppState('signedOut');
+    setRegistrations({ social: null, professional: null });
+    setAuthStage('signedOut');
   }
 
   function handleConfirmed(match) {
-    setMatchData(match);
-    setRegistration(prev => prev ? { ...prev, status: 'confirmed', match } : prev);
-    setAppState('confirmed');
+    setRegistrations(prev => {
+      const current = prev[dinnerType];
+      if (!current) return prev;
+      return { ...prev, [dinnerType]: { ...current, status: 'confirmed', match } };
+    });
   }
 
   async function handleReject() {
     try {
-      await requestJson('/match/reject', { token: authToken, method: 'POST', body: JSON.stringify({ registrationId: registration?.id }) });
+      await requestJson('/match/reject', { token: authToken, method: 'POST', body: JSON.stringify({ registrationId: activeRegistration?.id }) });
       push('You rejected this table. You can register again in 6 hours.', 'success');
       await loadStatus(authToken);
     } catch (err) {
@@ -730,7 +740,23 @@ function App() {
     <main>
       <Toast messages={messages} />
       <nav className="nav">
-        <a className="brand" href="#top"><span>6</span>DinnerSix</a>
+        <div className="nav-left">
+          <a className="brand" href="#top"><span>6</span>DinnerSix</a>
+          <div className="dinner-type-toggle nav-toggle" role="tablist">
+            {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={dinnerType === key}
+                className={dinnerType === key ? 'active' : ''}
+                onClick={() => setDinnerType(key)}
+              >
+                {cfg.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="nav-links">
           {(appState === 'signedOut' || appState === 'form') && (
             <>
@@ -750,17 +776,17 @@ function App() {
       </nav>
 
       {appState === 'loading' && <section className="section pending-panel"><div className="pending-card"><h2>Loading DinnerSix…</h2></div></section>}
-      {appState === 'pending' && <PendingScreen user={user} registration={registration} checking={checkingStatus} onCheck={() => loadStatus(authToken, { manual: true })} onSignOut={signOut} />}
+      {appState === 'pending' && <PendingScreen user={user} registration={activeRegistration} checking={checkingStatus} onCheck={() => loadStatus(authToken, { manual: true })} onSignOut={signOut} />}
       {appState === 'rejected' && (
         <RejectedScreen
-          retryAt={registration?.rejectedAt ? new Date(registration.rejectedAt).getTime() + REJECT_COOLDOWN_MS : Date.now()}
+          retryAt={activeRegistration?.rejectedAt ? new Date(activeRegistration.rejectedAt).getTime() + REJECT_COOLDOWN_MS : Date.now()}
           checking={checkingStatus}
           onCheck={() => loadStatus(authToken, { manual: true })}
           onSignOut={signOut}
         />
       )}
       {appState === 'matched' && matchData && (
-        <MatchSection match={matchData} registrationId={registration?.id} token={authToken} onConfirm={handleConfirmed} onReject={handleReject} push={push} />
+        <MatchSection match={matchData} registrationId={activeRegistration?.id} token={authToken} onConfirm={handleConfirmed} onReject={handleReject} push={push} />
       )}
       {appState === 'confirmed' && matchData && <ConfirmedScreen match={matchData} token={authToken} push={push} onSignOut={signOut} />}
 
@@ -768,20 +794,6 @@ function App() {
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
-              <div className="dinner-type-toggle hero-toggle" role="tablist">
-                {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={dinnerType === key}
-                    className={dinnerType === key ? 'active' : ''}
-                    onClick={() => setDinnerType(key)}
-                  >
-                    {cfg.label}
-                  </button>
-                ))}
-              </div>
               <p className="eyebrow">{dinnerTypeCopy.eyebrow}</p>
               <h1>{dinnerTypeCopy.headline}</h1>
               <p className="lead">{dinnerTypeCopy.lead}</p>
