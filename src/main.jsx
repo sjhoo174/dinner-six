@@ -18,6 +18,7 @@ const ATTENDANCE_OPTIONS = [
   { value: 'late', label: 'Running late' },
   { value: 'not_showing', label: "Can't make it" },
 ];
+const REJECT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 const initialForm = {
   name: '', phone: '', gender: 'Female', age: '28', industry: 'Tech',
@@ -101,6 +102,15 @@ function formatCountdown(ms) {
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 }
 
+function formatEventDateTime(iso) {
+  if (!iso) return '';
+  const formatted = new Date(iso).toLocaleString('en-SG', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Singapore',
+  });
+  return `${formatted} SGT`;
+}
+
 function EventCountdown({ eventAt, eventEndsAt }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -110,10 +120,11 @@ function EventCountdown({ eventAt, eventEndsAt }) {
   if (!eventAt) return null;
   const start = new Date(eventAt).getTime();
   const end = eventEndsAt ? new Date(eventEndsAt).getTime() : null;
+  const dateLabel = formatEventDateTime(eventAt);
   if (now < start) {
     return (
       <div className="event-countdown">
-        <span>Your table starts in</span>
+        <span>Your table is on {dateLabel}</span>
         <strong>{formatCountdown(start - now)}</strong>
       </div>
     );
@@ -121,7 +132,7 @@ function EventCountdown({ eventAt, eventEndsAt }) {
   if (end && now < end) {
     return (
       <div className="event-countdown live">
-        <span>Your table is happening now</span>
+        <span>Your table is happening now · {dateLabel}</span>
       </div>
     );
   }
@@ -294,7 +305,41 @@ function PendingScreen({ user, registration, checking, onCheck, onSignOut }) {
   );
 }
 
-function ConfirmedScreen({ match, token, push, onReset }) {
+function RejectedScreen({ retryAt, checking, onCheck, onSignOut }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const remaining = retryAt - now;
+
+  return (
+    <section className="section pending-panel" id="status">
+      <div className="pending-card">
+        <p className="eyebrow">Table declined</p>
+        <h2>You can register for a new table soon.</h2>
+        <p>
+          You rejected your last matched table. To keep things fair for restaurants and other guests,
+          you can register again 6 hours after rejecting.
+        </p>
+        {remaining > 0 ? (
+          <div className="event-countdown">
+            <span>You can register again in</span>
+            <strong>{formatCountdown(remaining)}</strong>
+          </div>
+        ) : (
+          <p className="pending-note">You can register again now — check your status to continue.</p>
+        )}
+        <div className="pending-actions">
+          <button className="button primary" onClick={onCheck} disabled={checking}>{checking ? 'Checking…' : 'Check status now'}</button>
+          <button className="button secondary" onClick={onSignOut}>Sign out</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ConfirmedScreen({ match, token, push, onSignOut }) {
   return (
     <div className="confirmed-screen">
       <div className="confirmed-inner">
@@ -305,14 +350,15 @@ function ConfirmedScreen({ match, token, push, onReset }) {
         <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
         <AttendanceSelector match={match} token={token} push={push} />
         <RatingPanel match={match} token={token} push={push} />
-        <button className="button primary" onClick={onReset}>Back to status</button>
+        <button className="button secondary" onClick={onSignOut}>Sign out</button>
       </div>
     </div>
   );
 }
 
-function MatchSection({ match, registrationId, token, onConfirm, onReset, push }) {
+function MatchSection({ match, registrationId, token, onConfirm, onReject, push }) {
   const [confirming, setConfirming] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const genders = asBars(countBy(match.group, 'gender'));
   const industries = asBars(countBy(match.group, 'industry'));
   const personas = asBars(countBy(match.group, 'persona'));
@@ -332,12 +378,21 @@ function MatchSection({ match, registrationId, token, onConfirm, onReset, push }
     }
   }
 
+  async function handleReject() {
+    setRejecting(true);
+    try {
+      await onReject();
+    } finally {
+      setRejecting(false);
+    }
+  }
+
   return (
     <section className="section match" id="match">
       <div className="section-head">
         <p className="eyebrow match-eyebrow">✓ Your table is ready</p>
         <h2>Your next table of {match.group.length}.</h2>
-        <p>Preview your matched group, restaurant, and fit before confirming your seat.</p>
+        <p>Preview your matched group, restaurant, and fit, then confirm or reject your seat.</p>
       </div>
       <div className="match-grid">
         <div className="table-card">
@@ -349,7 +404,6 @@ function MatchSection({ match, registrationId, token, onConfirm, onReset, push }
             <div className="compat-score"><strong>{match.compatibility}%</strong><span>compatibility score</span></div>
           )}
           <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
-          <AttendanceSelector match={match} token={token} push={push} />
         </div>
         <div className="insights">
           <h3>Who's turning up?</h3>
@@ -371,8 +425,8 @@ function MatchSection({ match, registrationId, token, onConfirm, onReset, push }
         </div>
       </div>
       <div className="confirm-strip">
-        <button className="button primary" onClick={handleConfirm} disabled={confirming}>{confirming ? 'Confirming…' : 'Confirm my spot 🍽️'}</button>
-        <button className="button secondary" onClick={onReset}>Back to status</button>
+        <button className="button primary" onClick={handleConfirm} disabled={confirming || rejecting}>{confirming ? 'Confirming…' : 'Confirm my spot 🍽️'}</button>
+        <button className="button secondary" onClick={handleReject} disabled={confirming || rejecting}>{rejecting ? 'Rejecting…' : "Can't make this table"}</button>
       </div>
     </section>
   );
@@ -522,6 +576,9 @@ function App() {
       } else if (data.registration?.status === 'confirmed') {
         setMatchData(data.registration.match);
         setAppState('confirmed');
+      } else if (data.registration?.status === 'rejected') {
+        const retryAt = data.registration.rejectedAt ? new Date(data.registration.rejectedAt).getTime() + REJECT_COOLDOWN_MS : 0;
+        setAppState(Date.now() < retryAt ? 'rejected' : 'form');
       } else if (data.registration) {
         setAppState('pending');
         if (opts.manual) push('No match yet — we are still finding the right table for you.', 'success');
@@ -600,12 +657,29 @@ function App() {
     setAppState('confirmed');
   }
 
+  async function handleReject() {
+    try {
+      await requestJson('/match/reject', { token: authToken, method: 'POST', body: JSON.stringify({ registrationId: registration?.id }) });
+      push('You rejected this table. You can register again in 6 hours.', 'success');
+      await loadStatus(authToken);
+    } catch (err) {
+      push(err.message);
+    }
+  }
+
   return (
     <main>
       <Toast messages={messages} />
       <nav className="nav">
         <a className="brand" href="#top"><span>6</span>DinnerSix</a>
-        <div className="nav-links"><a href="#how">How it works</a><a href="#signup">Register</a></div>
+        <div className="nav-links">
+          {(appState === 'signedOut' || appState === 'form') && (
+            <>
+              <a href="#how">How it works</a>
+              <a href="#signup">Register</a>
+            </>
+          )}
+        </div>
         <div className="nav-right">
           {user?.email ? (
             <>
@@ -618,9 +692,20 @@ function App() {
 
       {appState === 'loading' && <section className="section pending-panel"><div className="pending-card"><h2>Loading DinnerSix…</h2></div></section>}
       {appState === 'pending' && <PendingScreen user={user} registration={registration} checking={checkingStatus} onCheck={() => loadStatus(authToken, { manual: true })} onSignOut={signOut} />}
-      {appState === 'confirmed' && matchData && <ConfirmedScreen match={matchData} token={authToken} push={push} onReset={() => setAppState('pending')} />}
+      {appState === 'rejected' && (
+        <RejectedScreen
+          retryAt={registration?.rejectedAt ? new Date(registration.rejectedAt).getTime() + REJECT_COOLDOWN_MS : Date.now()}
+          checking={checkingStatus}
+          onCheck={() => loadStatus(authToken, { manual: true })}
+          onSignOut={signOut}
+        />
+      )}
+      {appState === 'matched' && matchData && (
+        <MatchSection match={matchData} registrationId={registration?.id} token={authToken} onConfirm={handleConfirmed} onReject={handleReject} push={push} />
+      )}
+      {appState === 'confirmed' && matchData && <ConfirmedScreen match={matchData} token={authToken} push={push} onSignOut={signOut} />}
 
-      {(appState === 'signedOut' || appState === 'form' || appState === 'matched') && (
+      {(appState === 'signedOut' || appState === 'form') && (
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
@@ -661,8 +746,6 @@ function App() {
             </div>
             {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} /> : <SignInPanel />}
           </section>
-
-          {appState === 'matched' && matchData && <MatchSection match={matchData} registrationId={registration?.id} token={authToken} onConfirm={handleConfirmed} onReset={() => setAppState('pending')} push={push} />}
 
           <section className="section restaurant">
             <div><p className="eyebrow">For restaurants</p><h2>Fill quieter nights with curated tables.</h2><p>Partner restaurants get predictable group bookings and guests who arrive primed for a shared dining experience.</p></div>
