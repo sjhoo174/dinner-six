@@ -14,17 +14,38 @@ const LANGUAGES = ['English', 'Mandarin', 'Malay', 'Tamil', 'Other'];
 const SMOKING = ['Non-smoker', 'Smoker', 'No preference'];
 const STEPS = ['About you', 'Preferences', 'Dinner fit'];
 const ATTENDANCE_OPTIONS = [
-  { value: 'on_time', label: 'On time' },
-  { value: 'late', label: 'Running late' },
-  { value: 'not_showing', label: "Can't make it" },
+  { value: 'on_time', label: '✅ On time' },
+  { value: 'late', label: '⏰ Running late' },
+  { value: 'not_showing', label: "🚫 Can't make it" },
 ];
+const NETWORKING_GOALS = ['Find co-founders', 'Career mentorship', 'Client / business development', 'Explore new industries', 'Grow professional network'];
 const REJECT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
+const DINNER_TYPES = {
+  social: {
+    label: 'Social Dining',
+    eyebrow: 'Algorithmic dinner matching · Singapore',
+    headline: 'Meet 4 to 6 interesting strangers over dinner.',
+    lead: 'DinnerSix uses a matching algorithm to group compatible people into tables of 4-6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.',
+    trust: ['Google sign-in required', 'Area + budget preferences', '4-6 person tables'],
+    howStep2: 'Tell us your area, budget, dietary needs, social energy, and conversation topics.',
+  },
+  professional: {
+    label: 'Professional Networking',
+    eyebrow: 'Algorithmic networking dinners · Singapore',
+    headline: 'Build real industry connections over dinner.',
+    lead: 'DinnerSix Professional matches you into curated tables of 4-6 driven professionals for purposeful networking — no name tags, no small-talk circles, just dinner with people worth knowing.',
+    trust: ['Google sign-in required', 'Industry-aware matching', '4-6 person tables'],
+    howStep2: 'Tell us your industry, networking goal, area, and budget so we can seat you with the right people.',
+  },
+};
 
 const initialForm = {
   name: '', phone: '', gender: 'Female', age: '28', industry: 'Tech',
   vibe: 'Deep talks', energy: 'Balanced', topics: ['Food', 'Travel', 'Startups'],
   area: 'Central', budget: '$35-$50', diet: 'No restrictions', night: 'Thursday',
   alcohol: 'Social drinker', language: 'English', smoking: 'Non-smoker',
+  dinnerType: 'social', networkingGoal: NETWORKING_GOALS[0],
 };
 
 function api(path) {
@@ -289,6 +310,7 @@ function PendingScreen({ user, registration, checking, onCheck, onSignOut }) {
           </div>
         </div>
         <div className="preference-summary">
+          <span>{DINNER_TYPES[registration?.profile?.dinnerType || 'social'].label}</span>
           <span>{registration?.profile?.area || 'Area'} area</span>
           <span>{registration?.profile?.budget || 'Budget selected'}</span>
           <span>{registration?.profile?.night || 'Preferred night'}</span>
@@ -390,7 +412,7 @@ function MatchSection({ match, registrationId, token, onConfirm, onReject, push 
   return (
     <section className="section match" id="match">
       <div className="section-head">
-        <p className="eyebrow match-eyebrow">✓ Your table is ready</p>
+        <p className="eyebrow match-eyebrow">✓ Your table is ready · {DINNER_TYPES[match.dinnerType || 'social'].label}</p>
         <h2>Your next table of {match.group.length}.</h2>
         <p>Preview your matched group, restaurant, and fit, then confirm or reject your seat.</p>
       </div>
@@ -419,6 +441,7 @@ function MatchSection({ match, registrationId, token, onConfirm, onReject, push 
                 <h4>{p.name}</h4>
                 <p>{p.persona} · {p.industry} · {p.gender}</p>
                 <span>{p.vibe} · {p.energy}</span>
+                {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
               </div>
             </article>
           ))}
@@ -432,8 +455,8 @@ function MatchSection({ match, registrationId, token, onConfirm, onReject, push 
   );
 }
 
-function SignupForm({ user, onSubmit, loading }) {
-  const [form, setForm] = useState(initialForm);
+function SignupForm({ user, onSubmit, loading, defaultDinnerType }) {
+  const [form, setForm] = useState(() => ({ ...initialForm, dinnerType: defaultDinnerType || 'social' }));
   const [step, setStep] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
   const turnstileRef = useRef(null);
@@ -496,6 +519,21 @@ function SignupForm({ user, onSubmit, loading }) {
       <form className="signup" onSubmit={step < STEPS.length - 1 ? next : handleSubmit}>
         {step === 0 && (
           <div className="form-step">
+            <div className="dinner-type-field">
+              <span>Dinner type</span>
+              <div className="dinner-type-toggle">
+                {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={form.dinnerType === key ? 'active' : ''}
+                    onClick={() => update('dinnerType', key)}
+                  >
+                    {cfg.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label>Full name<input value={form.name} onChange={e => update('name', e.target.value)} placeholder="Your name" required /></label>
             <label>Phone number<input type="tel" value={form.phone} onChange={e => update('phone', e.target.value)} placeholder="+65 9123 4567" required /></label>
             <label>Gender<select value={form.gender} onChange={e => update('gender', e.target.value)}>{['Female','Male'].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -511,6 +549,9 @@ function SignupForm({ user, onSubmit, loading }) {
             <label>Social energy<select value={form.energy} onChange={e => update('energy', e.target.value)}>{['Calm','Balanced','Outgoing'].map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Alcohol preference<select value={form.alcohol} onChange={e => update('alcohol', e.target.value)}>{ALCOHOLS.map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Preferred language<select value={form.language} onChange={e => update('language', e.target.value)}>{LANGUAGES.map(x => <option key={x}>{x}</option>)}</select></label>
+            {form.dinnerType === 'professional' && (
+              <label>Networking goal<select value={form.networkingGoal} onChange={e => update('networkingGoal', e.target.value)}>{NETWORKING_GOALS.map(x => <option key={x}>{x}</option>)}</select></label>
+            )}
             <div className="topic-box"><span>Pick up to 5 topics you enjoy</span>{TOPICS.map(t => <button type="button" key={t} className={form.topics.includes(t) ? 'selected' : ''} onClick={() => toggleTopic(t)}>{t}</button>)}</div>
           </div>
         )}
@@ -521,8 +562,11 @@ function SignupForm({ user, onSubmit, loading }) {
             <label>Smoking preference<select value={form.smoking} onChange={e => update('smoking', e.target.value)}>{SMOKING.map(x => <option key={x}>{x}</option>)}</select></label>
             <div className="review-box">
               <span>Preference summary</span>
-              <strong>{form.area} · {form.budget} · {form.night}</strong>
-              <p>{form.vibe}, {form.energy.toLowerCase()} energy, {form.diet.toLowerCase()}, {form.alcohol.toLowerCase()}, {form.language}.</p>
+              <strong>{DINNER_TYPES[form.dinnerType].label} · {form.area} · {form.budget} · {form.night}</strong>
+              <p>
+                {form.vibe}, {form.energy.toLowerCase()} energy, {form.diet.toLowerCase()}, {form.alcohol.toLowerCase()}, {form.language}
+                {form.dinnerType === 'professional' ? `, networking goal: ${form.networkingGoal.toLowerCase()}` : ''}.
+              </p>
             </div>
             <div className="turnstile-box">
               <span>Quick human check</span>
@@ -554,7 +598,9 @@ function App() {
   const [matchData, setMatchData] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [dinnerType, setDinnerType] = useState('social');
   const { messages, push } = useToast();
+  const dinnerTypeCopy = DINNER_TYPES[dinnerType];
 
   const previewMatch = {
     compatibility: 91,
@@ -709,11 +755,25 @@ function App() {
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
-              <p className="eyebrow">Dinner matching · Singapore</p>
-              <h1>Meet 4 to 6 interesting strangers over dinner.</h1>
-              <p className="lead">DinnerSix uses a matching algorithm to group compatible people into tables of 4-6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.</p>
+              <div className="dinner-type-toggle hero-toggle" role="tablist">
+                {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={dinnerType === key}
+                    className={dinnerType === key ? 'active' : ''}
+                    onClick={() => setDinnerType(key)}
+                  >
+                    {cfg.label}
+                  </button>
+                ))}
+              </div>
+              <p className="eyebrow">{dinnerTypeCopy.eyebrow}</p>
+              <h1>{dinnerTypeCopy.headline}</h1>
+              <p className="lead">{dinnerTypeCopy.lead}</p>
               <div className="hero-actions"><a className="button primary" href="#signup">Continue with Google</a><a className="button secondary" href="#how">See how it works</a></div>
-              <div className="trust"><span>Google sign-in required</span><span>Area + budget preferences</span><span>4-6 person tables</span></div>
+              <div className="trust">{dinnerTypeCopy.trust.map(t => <span key={t}>{t}</span>)}</div>
             </div>
             <div className="phone-card">
               <div className="phone-top"><span>Sample table</span><strong>{previewMatch.compatibility}% fit</strong></div>
@@ -733,7 +793,7 @@ function App() {
             <div className="section-head"><p className="eyebrow">How it works</p><h2>Sign in, register preferences, then return when matched.</h2></div>
             <div className="steps">
               <article><span>01</span><h3>Sign in with Google</h3><p>Use your Google account first so your registration and status are tied to your email.</p></article>
-              <article><span>02</span><h3>Share your dinner fit</h3><p>Tell us your area, budget, dietary needs, social energy, and conversation topics.</p></article>
+              <article><span>02</span><h3>Share your dinner fit</h3><p>{dinnerTypeCopy.howStep2}</p></article>
               <article><span>03</span><h3>Confirm when ready</h3><p>Our matching algorithm scores compatibility across everyone's preferences and forms your table automatically — no manual curation. Sign in with the same Google account later to see your table, restaurant, and event time.</p></article>
             </div>
           </section>
@@ -744,7 +804,7 @@ function App() {
               <h2>{user ? 'Register your dinner preferences.' : 'Continue with Google.'}</h2>
               <p>{user ? 'Your registration is stored with your signed-in email so you can return later from any device.' : 'Use Google sign-in before the registration form is shown.'}</p>
             </div>
-            {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} /> : <SignInPanel />}
+            {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} defaultDinnerType={dinnerType} /> : <SignInPanel />}
           </section>
 
           <section className="section restaurant">
@@ -755,7 +815,7 @@ function App() {
             </div>
           </section>
 
-          <footer><a className="brand" href="#top"><span>6</span>DinnerSix</a><p>Free social dining matches. Real-world connection.</p><a href="#signup">Register</a></footer>
+          <footer><a className="brand" href="#top"><span>6</span>DinnerSix</a><p>Free dinner matching for social dining and professional networking.</p><a href="#signup">Register</a></footer>
         </>
       )}
     </main>
