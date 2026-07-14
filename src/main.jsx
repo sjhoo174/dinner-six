@@ -412,9 +412,11 @@ function GuestList({ group }) {
             <p>{p.persona} · {p.industry} · {p.gender}</p>
             <span>{p.vibe} · {p.energy}</span>
             {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
-            <span className={`confirm-badge ${p.confirmed ? 'confirmed' : 'pending'}`}>
-              {p.confirmed ? '✓ Confirmed' : 'Pending confirmation'}
-            </span>
+            {!p.isUser && (
+              <span className={`confirm-badge ${p.confirmed ? 'confirmed' : 'pending'}`}>
+                {p.confirmed ? '✓ Confirmed' : 'Pending confirmation'}
+              </span>
+            )}
           </div>
         </article>
       ))}
