@@ -198,7 +198,7 @@ function EventCountdown({ eventAt, eventEndsAt }) {
   return null;
 }
 
-function AttendanceSelector({ match, token, push }) {
+function AttendanceSelector({ match, token, push, onUnmatched }) {
   const me = match.group.find(p => p.isUser);
   const [status, setStatus] = useState(me?.attendanceStatus || 'unknown');
   const [saving, setSaving] = useState(false);
@@ -207,9 +207,14 @@ function AttendanceSelector({ match, token, push }) {
   async function setAttendance(value) {
     setSaving(true);
     try {
-      await requestJson('/attendance', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, status: value }) });
+      const data = await requestJson('/attendance', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, status: value }) });
       setStatus(value);
-      push('Attendance updated.', 'success');
+      if (data.groupUnmatched) {
+        push("2 or more people can't make it, so this table has been unmatched. You're back in the pool for a new match.", 'success');
+        onUnmatched?.();
+      } else {
+        push('Attendance updated.', 'success');
+      }
     } catch (err) {
       push(err.message);
     } finally {
@@ -424,7 +429,7 @@ function GuestList({ group }) {
   );
 }
 
-function ConfirmedScreen({ match, token, push, onSignOut }) {
+function ConfirmedScreen({ match, token, push, onSignOut, onUnmatched }) {
   return (
     <div className="confirmed-screen">
       <div className="confirmed-inner">
@@ -433,7 +438,7 @@ function ConfirmedScreen({ match, token, push, onSignOut }) {
         <p>See you at <strong>{match.restaurant.name}</strong> in {match.restaurant.area}.</p>
         <p className="confirmed-perk">✨ {match.restaurant.perk}</p>
         <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
-        <AttendanceSelector match={match} token={token} push={push} />
+        <AttendanceSelector match={match} token={token} push={push} onUnmatched={onUnmatched} />
         <div className="confirmed-guests">
           <h3>Who's coming</h3>
           <GuestList group={match.group} />
@@ -813,7 +818,9 @@ function App() {
       {appState === 'matched' && matchData && (
         <MatchSection match={matchData} registrationId={activeRegistration?.id} token={authToken} onConfirm={handleConfirmed} onReject={handleReject} push={push} />
       )}
-      {appState === 'confirmed' && matchData && <ConfirmedScreen match={matchData} token={authToken} push={push} onSignOut={signOut} />}
+      {appState === 'confirmed' && matchData && (
+        <ConfirmedScreen match={matchData} token={authToken} push={push} onSignOut={signOut} onUnmatched={() => loadStatus(authToken)} />
+      )}
 
       {(appState === 'signedOut' || appState === 'form') && (
         <>
