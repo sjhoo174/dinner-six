@@ -28,7 +28,21 @@ const DINNER_TYPES = {
     headline: 'Meet 4 to 6 interesting strangers over dinner.',
     lead: 'DinnerSix uses a matching algorithm to group compatible people into tables of 4-6 for dinner, drinks, and real conversation. Sign in with Google, share your preferences, then check back when your table is ready.',
     trust: ['Google sign-in required', 'Area + budget preferences', '4-6 person tables'],
-    howStep2: 'Tell us your area, budget, dietary needs, social energy, and conversation topics.',
+    valuePropsEyebrow: 'Why social dining',
+    valuePropsHeadline: 'Built for genuine connection, not another group chat.',
+    valueProps: [
+      { icon: '🍜', title: 'Real conversation', body: 'No agenda, no small talk circles — just a table of people matched for genuine chemistry over a shared meal.' },
+      { icon: '🎲', title: 'Curated by vibe', body: 'Matched on energy, interests, and conversation style, not just your neighbourhood and budget.' },
+      { icon: '🤝', title: 'Meet outside your bubble', body: 'Every table mixes industries and backgrounds, so you leave with a new perspective and new friends.' },
+    ],
+    howHeadline: 'Sign in, register preferences, then return when matched.',
+    howSteps: [
+      { title: 'Sign in with Google', body: 'Use your Google account first so your registration and status are tied to your email.' },
+      { title: 'Share your dinner fit', body: 'Tell us your area, budget, dietary needs, social energy, and conversation topics.' },
+      { title: 'Confirm when ready', body: "Our matching algorithm scores compatibility across everyone's preferences and forms your table automatically — no manual curation. Sign in with the same Google account later to see your table, restaurant, and event time." },
+    ],
+    registerHeadline: 'Register your dinner preferences.',
+    registerBody: 'Your social dining registration is stored with your signed-in email so you can return later from any device — separate from any professional networking registration you hold.',
   },
   professional: {
     label: 'Professional Networking',
@@ -36,7 +50,21 @@ const DINNER_TYPES = {
     headline: 'Build real industry connections over dinner.',
     lead: 'DinnerSix Professional matches you into curated tables of 4-6 driven professionals for purposeful networking — no name tags, no small-talk circles, just dinner with people worth knowing.',
     trust: ['Google sign-in required', 'Industry-aware matching', '4-6 person tables'],
-    howStep2: 'Tell us your industry, networking goal, area, and budget so we can seat you with the right people.',
+    valuePropsEyebrow: 'Why professional networking',
+    valuePropsHeadline: 'Built for outcomes, not business cards.',
+    valueProps: [
+      { icon: '💼', title: 'Purposeful networking', body: 'Every guest opts in with a specific goal — co-founders, mentorship, or new clients — so conversations start with intent.' },
+      { icon: '🧭', title: 'Matched by industry fit', body: 'Tables are built around complementary industries and seniority, not a random mixer name tag.' },
+      { icon: '🕰️', title: 'Your time, respected', body: 'One dinner, a fixed group, a clear end time — no endless card-swapping or awkward standing mingling.' },
+    ],
+    howHeadline: 'Sign in, register your networking goals, then return when matched.',
+    howSteps: [
+      { title: 'Sign in with Google', body: 'Your professional registration and status are tied to your Google account, kept separate from any social dining registration.' },
+      { title: 'Share your networking fit', body: 'Tell us your industry, networking goal, area, and budget so we can seat you with the right people.' },
+      { title: 'Confirm when ready', body: 'Our matching algorithm forms your table automatically around complementary goals and industries — no manual curation. Sign in with the same Google account later to see your table, restaurant, and event time.' },
+    ],
+    registerHeadline: 'Register your networking preferences.',
+    registerBody: 'Your professional registration is stored separately from any social dining registration, tied to your signed-in email so you can return later from any device.',
   },
 };
 
@@ -737,7 +765,7 @@ function App() {
   }
 
   return (
-    <main>
+    <main data-dinner-type={dinnerType}>
       <Toast messages={messages} />
       <nav className="nav">
         <div className="nav-left">
@@ -814,20 +842,33 @@ function App() {
             <div><strong>4-6</strong><span>people per table</span></div>
           </section>
 
+          <section className="section">
+            <div className="section-head"><p className="eyebrow">{dinnerTypeCopy.valuePropsEyebrow}</p><h2>{dinnerTypeCopy.valuePropsHeadline}</h2></div>
+            <div className="value-prop-grid">
+              {dinnerTypeCopy.valueProps.map(v => (
+                <article key={v.title}>
+                  <span className="value-prop-icon">{v.icon}</span>
+                  <h3>{v.title}</h3>
+                  <p>{v.body}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
           <section className="section" id="how">
-            <div className="section-head"><p className="eyebrow">How it works</p><h2>Sign in, register preferences, then return when matched.</h2></div>
+            <div className="section-head"><p className="eyebrow">How it works</p><h2>{dinnerTypeCopy.howHeadline}</h2></div>
             <div className="steps">
-              <article><span>01</span><h3>Sign in with Google</h3><p>Use your Google account first so your registration and status are tied to your email.</p></article>
-              <article><span>02</span><h3>Share your dinner fit</h3><p>{dinnerTypeCopy.howStep2}</p></article>
-              <article><span>03</span><h3>Confirm when ready</h3><p>Our matching algorithm scores compatibility across everyone's preferences and forms your table automatically — no manual curation. Sign in with the same Google account later to see your table, restaurant, and event time.</p></article>
+              {dinnerTypeCopy.howSteps.map((step, i) => (
+                <article key={step.title}><span>{String(i + 1).padStart(2, '0')}</span><h3>{step.title}</h3><p>{step.body}</p></article>
+              ))}
             </div>
           </section>
 
           <section className="section split" id="signup">
             <div>
               <p className="eyebrow">Registration</p>
-              <h2>{user ? 'Register your dinner preferences.' : 'Continue with Google.'}</h2>
-              <p>{user ? 'Your registration is stored with your signed-in email so you can return later from any device.' : 'Use Google sign-in before the registration form is shown.'}</p>
+              <h2>{user ? dinnerTypeCopy.registerHeadline : 'Continue with Google.'}</h2>
+              <p>{user ? dinnerTypeCopy.registerBody : 'Use Google sign-in before the registration form is shown.'}</p>
             </div>
             {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} defaultDinnerType={dinnerType} /> : <SignInPanel />}
           </section>
