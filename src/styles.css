@@ -107,8 +107,6 @@ h3 { font-size: 1.5rem; line-height: 1.08; }
 .dinner-type-toggle button { border: 0; background: transparent; color: var(--muted); font-weight: 800; font-size: .86rem; padding: 10px 18px; border-radius: 999px; cursor: pointer; transition: background var(--transition), color var(--transition), box-shadow var(--transition); white-space: nowrap; }
 .dinner-type-toggle button.active { background: var(--gradient-brand); color: white; box-shadow: 0 6px 16px rgba(var(--accent-rgb),.3); }
 .dinner-type-toggle button:not(.active):hover { color: var(--ink); background: var(--soft); }
-.dinner-type-field { grid-column: 1 / -1; display: grid; gap: 8px; margin-bottom: 4px; }
-.dinner-type-field > span { font-weight: 850; color: var(--ink); }
 
 .lead { font-size: 1.2rem; max-width: 680px; color: var(--ink-2); margin: 16px 0 0; }
 .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 28px; }
@@ -297,7 +295,5 @@ footer > a:last-child { font-weight: 900; color: var(--accent); }
   .form-nav, .confirm-strip { flex-direction: column; }
   .toast-stack { bottom: 12px; right: 12px; left: 12px; }
   .toast { max-width: 100%; }
-  .dinner-type-field .dinner-type-toggle { width: 100%; }
-  .dinner-type-field .dinner-type-toggle button { flex: 1; }
   .nav-toggle button { padding: 6px 10px; font-size: .7rem; }
 }

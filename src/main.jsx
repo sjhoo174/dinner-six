@@ -6,7 +6,11 @@ const API = import.meta.env.VITE_API_BASE || 'https://dinner-six-backend.shijanh
 const AUTH_KEY = 'dinnerSixAuthToken';
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
 
-const TOPICS = ['Food', 'Travel', 'Startups', 'Books', 'Fitness', 'Music', 'AI', 'Culture', 'Comedy', 'Social impact', 'Gaming', 'Architecture'];
+const TOPICS = [
+  'Food', 'Travel', 'Startups', 'Books', 'Fitness', 'Music', 'AI', 'Culture', 'Comedy', 'Social impact',
+  'Gaming', 'Architecture', 'Movies & TV', 'Fashion', 'Photography', 'Wellness', 'Investing', 'Sports',
+  'Cooking', 'Wine & spirits', 'Podcasts', 'Science', 'Nature & outdoors', 'Cars', 'Pets', 'Spirituality',
+];
 const AREAS = ['Central', 'East', 'West', 'North', 'North-East', 'CBD'];
 const BUDGETS = ['$25-$35', '$35-$50', '$50-$70', '$70+'];
 const ALCOHOLS = ['Non-drinker', 'Social drinker', 'Drinks freely'];
@@ -43,6 +47,9 @@ const DINNER_TYPES = {
     ],
     registerHeadline: 'Register your dinner preferences.',
     registerBody: 'Your social dining registration is stored with your signed-in email so you can return later from any device — separate from any professional networking registration you hold.',
+    restaurantEyebrow: 'For restaurants',
+    restaurantHeadline: 'Fill quieter nights with curated tables.',
+    restaurantBody: 'Partner restaurants get predictable group bookings and guests who arrive primed for a shared dining experience.',
   },
   professional: {
     label: 'Professional Networking',
@@ -65,6 +72,9 @@ const DINNER_TYPES = {
     ],
     registerHeadline: 'Register your networking preferences.',
     registerBody: 'Your professional registration is stored separately from any social dining registration, tied to your signed-in email so you can return later from any device.',
+    restaurantEyebrow: 'For venues',
+    restaurantHeadline: 'Host business dinners that book themselves.',
+    restaurantBody: 'Partner venues get consistent weekday bookings from professionals who show up ready for focused, unhurried conversation — not just another happy hour crowd.',
   },
 };
 
@@ -562,21 +572,6 @@ function SignupForm({ user, onSubmit, loading, defaultDinnerType }) {
       <form className="signup" onSubmit={step < STEPS.length - 1 ? next : handleSubmit}>
         {step === 0 && (
           <div className="form-step">
-            <div className="dinner-type-field">
-              <span>Dinner type</span>
-              <div className="dinner-type-toggle">
-                {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={form.dinnerType === key ? 'active' : ''}
-                    onClick={() => update('dinnerType', key)}
-                  >
-                    {cfg.label}
-                  </button>
-                ))}
-              </div>
-            </div>
             <label>Full name<input value={form.name} onChange={e => update('name', e.target.value)} placeholder="Your name" required /></label>
             <label>Phone number<input type="tel" value={form.phone} onChange={e => update('phone', e.target.value)} placeholder="+65 9123 4567" required /></label>
             <label>Gender<select value={form.gender} onChange={e => update('gender', e.target.value)}>{['Female','Male'].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -870,11 +865,11 @@ function App() {
               <h2>{user ? dinnerTypeCopy.registerHeadline : 'Continue with Google.'}</h2>
               <p>{user ? dinnerTypeCopy.registerBody : 'Use Google sign-in before the registration form is shown.'}</p>
             </div>
-            {user ? <SignupForm user={user} onSubmit={handleFormSubmit} loading={formLoading} defaultDinnerType={dinnerType} /> : <SignInPanel />}
+            {user ? <SignupForm key={dinnerType} user={user} onSubmit={handleFormSubmit} loading={formLoading} defaultDinnerType={dinnerType} /> : <SignInPanel />}
           </section>
 
           <section className="section restaurant">
-            <div><p className="eyebrow">For restaurants</p><h2>Fill quieter nights with curated tables.</h2><p>Partner restaurants get predictable group bookings and guests who arrive primed for a shared dining experience.</p></div>
+            <div><p className="eyebrow">{dinnerTypeCopy.restaurantEyebrow}</p><h2>{dinnerTypeCopy.restaurantHeadline}</h2><p>{dinnerTypeCopy.restaurantBody}</p></div>
             <div className="restaurant-cards">
               <article><strong>Curated</strong><span>personality-matched groups</span></article>
               <article><strong>4-6 seats</strong><span>average per matched booking</span></article>
