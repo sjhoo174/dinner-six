@@ -249,6 +249,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .guest-list span.confirm-badge { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 999px; font-weight: 850; font-size: .78rem; }
 .guest-list span.confirm-badge.confirmed { background: rgba(0,168,120,.12); color: #00734f; }
 .guest-list span.confirm-badge.pending { background: rgba(106,106,138,.12); color: var(--muted); }
+.guest-list span.confirm-badge.not-showing { background: rgba(220,60,60,.12); color: #b02a2a; }
 .confirmed-guests { margin: 24px 0; text-align: left; }
 .confirmed-guests h3 { margin-bottom: 12px; text-align: center; }
 .confirm-strip { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 36px; padding: 0 28px; }

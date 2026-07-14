@@ -417,7 +417,10 @@ function GuestList({ group }) {
             <p>{p.persona} · {p.industry} · {p.gender}</p>
             <span>{p.vibe} · {p.energy}</span>
             {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
-            {!p.isUser && (
+            {!p.isUser && p.attendanceStatus === 'not_showing' && (
+              <span className="confirm-badge not-showing">🚫 Can't make it</span>
+            )}
+            {!p.isUser && p.attendanceStatus !== 'not_showing' && (
               <span className={`confirm-badge ${p.confirmed ? 'confirmed' : 'pending'}`}>
                 {p.confirmed ? '✓ Confirmed' : 'Pending confirmation'}
               </span>
@@ -758,8 +761,12 @@ function App() {
 
   async function handleReject() {
     try {
-      await requestJson('/match/reject', { token: authToken, method: 'POST', body: JSON.stringify({ registrationId: activeRegistration?.id }) });
-      push('You rejected this table. You can register again in 6 hours.', 'success');
+      const data = await requestJson('/match/reject', { token: authToken, method: 'POST', body: JSON.stringify({ registrationId: activeRegistration?.id }) });
+      if (data.groupUnmatched) {
+        push("You rejected this table, and with 2 or more unable to make it, the whole table has been unmatched. You can register again in 6 hours.", 'success');
+      } else {
+        push('You rejected this table. You can register again in 6 hours.', 'success');
+      }
       await loadStatus(authToken);
     } catch (err) {
       push(err.message);
