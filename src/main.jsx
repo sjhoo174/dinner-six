@@ -243,76 +243,6 @@ function AttendanceSelector({ match, token, push, onUnmatched }) {
   );
 }
 
-function RatingPanel({ match, token, push }) {
-  const [drafts, setDrafts] = useState({});
-  const [submitted, setSubmitted] = useState({});
-  const [loaded, setLoaded] = useState(false);
-  const tablemates = match.group.filter(p => !p.isUser);
-  const eligible = Boolean(match.ratingWindowOpensAt) && Date.now() >= new Date(match.ratingWindowOpensAt).getTime();
-
-  useEffect(() => {
-    if (!eligible) return;
-    requestJson(`/ratings/mine?groupId=${encodeURIComponent(match.groupId)}`, { token })
-      .then(data => {
-        const map = {};
-        (data.ratings || []).forEach(r => { map[r.rateeRegistrationId] = r; });
-        setSubmitted(map);
-      })
-      .finally(() => setLoaded(true));
-  }, [eligible, match.groupId, token]);
-
-  if (!eligible) return null;
-
-  function updateDraft(id, field, value) {
-    setDrafts(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }));
-  }
-
-  async function submitRating(registrationId) {
-    const draft = drafts[registrationId] || {};
-    if (!draft.rating) return;
-    try {
-      const data = await requestJson('/ratings', {
-        token, method: 'POST',
-        body: JSON.stringify({ groupId: match.groupId, rateeRegistrationId: registrationId, rating: Number(draft.rating), comment: draft.comment || '' }),
-      });
-      setSubmitted(prev => ({ ...prev, [registrationId]: data.rating }));
-      push('Rating submitted.', 'success');
-    } catch (err) {
-      push(err.message);
-    }
-  }
-
-  return (
-    <div className="rating-panel">
-      <h3>Rate your table</h3>
-      <p>Ratings help us improve future matches. This opens 3 hours after your table ends.</p>
-      {!loaded && <p className="pending-note">Loading your ratings…</p>}
-      {loaded && tablemates.map(p => (
-        <div className="rating-row" key={p.registrationId}>
-          <span>{p.name}</span>
-          {submitted[p.registrationId] ? (
-            <strong>✓ Rated {submitted[p.registrationId].rating}/5</strong>
-          ) : (
-            <div className="star-input">
-              <select value={drafts[p.registrationId]?.rating || ''} onChange={e => updateDraft(p.registrationId, 'rating', e.target.value)}>
-                <option value="">Rate 1-5</option>
-                {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-              <input
-                type="text"
-                placeholder="Optional comment"
-                value={drafts[p.registrationId]?.comment || ''}
-                onChange={e => updateDraft(p.registrationId, 'comment', e.target.value)}
-              />
-              <button type="button" className="button secondary" disabled={!drafts[p.registrationId]?.rating} onClick={() => submitRating(p.registrationId)}>Submit</button>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function SignInPanel() {
   function startGoogleSignIn() {
     const returnTo = `${window.location.origin}${window.location.pathname}`;
@@ -424,40 +354,58 @@ function BannedScreen({ onSignOut }) {
   );
 }
 
-// Up/down voting and reporting for a diner's tablemates. Voting only opens on
+function StarRating({ value, onSelect, disabled }) {
+  return (
+    <div className="star-rating" role="radiogroup" aria-label="Star rating">
+      {[1, 2, 3, 4, 5].map(n => (
+        <button
+          key={n}
+          type="button"
+          role="radio"
+          aria-checked={value === n}
+          aria-label={`${n} star${n === 1 ? '' : 's'}`}
+          className={`star-button ${value != null && n <= value ? 'filled' : ''}`}
+          disabled={disabled}
+          onClick={() => onSelect(n)}
+        >★</button>
+      ))}
+    </div>
+  );
+}
+
+// Star ratings and reporting for a diner's tablemates. Rating only opens on
 // the diner's LATEST successfully matched group; reporting opens on any
 // successfully matched group (one report chance per group).
-function VotingPanel({ match, token, user, push }) {
-  const [votes, setVotes] = useState({});
+function RatingPanel({ match, token, push }) {
+  const [ratings, setRatings] = useState({});
   const [reported, setReported] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [busyKey, setBusyKey] = useState(null);
   const tablemates = match.group.filter(p => !p.isUser);
-  const canVote = match.groupCompleted && match.isLatestSuccessfulGroup;
+  const canRate = match.groupCompleted && match.isLatestSuccessfulGroup;
   const canReport = match.groupCompleted;
-  const credits = user?.downvoteCreditsAvailable ?? 0;
 
   useEffect(() => {
     if (!match.groupCompleted) return;
     Promise.all([
-      canVote ? requestJson(`/votes/mine?groupId=${encodeURIComponent(match.groupId)}`, { token }) : Promise.resolve({ votes: [] }),
+      canRate ? requestJson(`/ratings/mine?groupId=${encodeURIComponent(match.groupId)}`, { token }) : Promise.resolve({ ratings: [] }),
       requestJson(`/reports/mine?groupId=${encodeURIComponent(match.groupId)}`, { token }),
-    ]).then(([voteData, reportData]) => {
+    ]).then(([ratingData, reportData]) => {
       const map = {};
-      (voteData.votes || []).forEach(v => { map[v.voteeRegistrationId] = v.direction; });
-      setVotes(map);
+      (ratingData.ratings || []).forEach(r => { map[r.rateeRegistrationId] = r.rating; });
+      setRatings(map);
       setReported(reportData.report?.reportedRegistrationId || null);
     }).finally(() => setLoaded(true));
-  }, [match.groupId, match.groupCompleted, canVote, token]);
+  }, [match.groupId, match.groupCompleted, canRate, token]);
 
   if (!match.groupCompleted) return null;
 
-  async function castVote(registrationId, direction) {
-    setBusyKey(`${registrationId}:${direction}`);
+  async function submitRating(registrationId, rating) {
+    setBusyKey(`${registrationId}:rate`);
     try {
-      await requestJson('/votes', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, voteeRegistrationId: registrationId, direction }) });
-      setVotes(prev => ({ ...prev, [registrationId]: direction }));
-      push(direction === 'up' ? 'Upvoted.' : 'Downvoted.', 'success');
+      await requestJson('/ratings', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, rateeRegistrationId: registrationId, rating }) });
+      setRatings(prev => ({ ...prev, [registrationId]: rating }));
+      push(`Rated ${rating}/5.`, 'success');
     } catch (err) {
       push(err.message);
     } finally {
@@ -480,34 +428,20 @@ function VotingPanel({ match, token, user, push }) {
   }
 
   return (
-    <div className="voting-panel">
+    <div className="rating-panel">
       <h3>Rate your tablemates</h3>
-      <p>
-        {canVote
-          ? `Up or down vote the people from this table. You have ${credits} down-vote credit${credits === 1 ? '' : 's'} available.`
-          : 'Voting is only open on your most recently completed table.'}
-      </p>
+      <p>{canRate ? 'Rate the people from this table out of 5 stars.' : 'Rating is only open on your most recently completed table.'}</p>
       {!loaded && <p className="pending-note">Loading…</p>}
       {loaded && tablemates.map(p => (
-        <div className="voting-row" key={p.registrationId}>
-          <span>{p.name}</span>
-          <div className="voting-actions">
-            {canVote && (
-              <>
-                <button
-                  type="button"
-                  className={`vote-button up ${votes[p.registrationId] === 'up' ? 'active' : ''}`}
-                  disabled={Boolean(votes[p.registrationId]) || busyKey === `${p.registrationId}:up`}
-                  onClick={() => castVote(p.registrationId, 'up')}
-                >👍</button>
-                <button
-                  type="button"
-                  className={`vote-button down ${votes[p.registrationId] === 'down' ? 'active' : ''}`}
-                  disabled={Boolean(votes[p.registrationId]) || busyKey === `${p.registrationId}:down` || credits <= 0}
-                  title={credits > 0 ? 'Down vote' : 'No down-vote credits available'}
-                  onClick={() => castVote(p.registrationId, 'down')}
-                >👎</button>
-              </>
+        <div className="rating-row" key={p.registrationId}>
+          <span>{p.name}{p.dinerCode ? ` · ${p.dinerCode}` : ''}</span>
+          <div className="rating-actions">
+            {canRate && (
+              ratings[p.registrationId] != null ? (
+                <StarRating value={ratings[p.registrationId]} onSelect={() => {}} disabled />
+              ) : (
+                <StarRating value={null} onSelect={n => submitRating(p.registrationId, n)} disabled={busyKey === `${p.registrationId}:rate`} />
+              )
             )}
             {canReport && (
               reported === p.registrationId ? (
@@ -532,10 +466,10 @@ function GuestList({ group }) {
   return (
     <div className="guest-list">
       {group.map(p => (
-        <article key={`${p.name}-${p.industry}`} className={p.isUser ? 'you' : ''}>
+        <article key={p.registrationId} className={p.isUser ? 'you' : ''}>
           <div className="guest-avatar">{p.isUser ? 'You' : p.name[0]}</div>
           <div>
-            <h4>{p.name}</h4>
+            <h4>{p.name} {p.dinerCode && <span className="diner-code">{p.dinerCode}</span>}</h4>
             <p>{p.persona} · {p.industry} · {p.gender}</p>
             <span>{p.vibe} · {p.energy}</span>
             {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
@@ -554,7 +488,7 @@ function GuestList({ group }) {
   );
 }
 
-function ConfirmedScreen({ match, token, user, push, onSignOut, onUnmatched, canRegisterAgain, onRegisterAgain }) {
+function ConfirmedScreen({ match, token, push, onSignOut, onUnmatched, canRegisterAgain, onRegisterAgain }) {
   return (
     <div className="confirmed-screen">
       <div className="confirmed-inner">
@@ -569,7 +503,6 @@ function ConfirmedScreen({ match, token, user, push, onSignOut, onUnmatched, can
           <GuestList group={match.group} />
         </div>
         <RatingPanel match={match} token={token} push={push} />
-        <VotingPanel match={match} token={token} user={user} push={push} />
         {canRegisterAgain && (
           <button className="button primary" onClick={onRegisterAgain}>Register for a new table</button>
         )}
@@ -965,7 +898,6 @@ function App() {
         <ConfirmedScreen
           match={matchData}
           token={authToken}
-          user={user}
           push={push}
           onSignOut={signOut}
           onUnmatched={() => loadStatus(authToken)}
