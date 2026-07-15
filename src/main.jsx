@@ -914,20 +914,20 @@ function App() {
       <nav className="nav">
         <div className="nav-left">
           <a className="brand" href="#top"><span>6</span>DinnerSix</a>
-          <div className="dinner-type-toggle nav-toggle" role="tablist">
-            {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={dinnerType === key}
-                className={dinnerType === key ? 'active' : ''}
-                onClick={() => setDinnerType(key)}
-              >
-                {cfg.label}
-              </button>
-            ))}
-          </div>
+        </div>
+        <div className="dinner-type-toggle nav-toggle" role="tablist">
+          {Object.entries(DINNER_TYPES).map(([key, cfg]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={dinnerType === key}
+              className={dinnerType === key ? 'active' : ''}
+              onClick={() => setDinnerType(key)}
+            >
+              {cfg.label}
+            </button>
+          ))}
         </div>
         <div className="nav-links">
           {(appState === 'signedOut' || appState === 'form') && (

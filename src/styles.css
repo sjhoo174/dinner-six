@@ -69,18 +69,18 @@ h3 { font-size: 1.5rem; line-height: 1.08; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 
-.nav { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); backdrop-filter: blur(20px) saturate(180%); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 28px; }
-.nav-left { display: flex; align-items: center; gap: 18px; }
+.nav { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); backdrop-filter: blur(20px) saturate(180%); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 14px 28px; }
+.nav-left { display: flex; align-items: center; gap: 18px; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.18rem; letter-spacing: -.04em; flex-shrink: 0; }
 .brand span { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--gradient-brand); color: white; font-weight: 900; box-shadow: 0 4px 12px rgba(var(--accent-rgb),.35); }
-.nav-toggle { padding: 3px; }
+.nav-toggle { padding: 3px; flex-shrink: 0; }
 .nav-toggle button { padding: 7px 14px; font-size: .78rem; }
 .nav-links { display: flex; gap: 22px; font-weight: 700; color: var(--muted); }
 .nav-links a { position: relative; padding: 4px 0; transition: color var(--transition); }
 .nav-links a:hover { color: var(--ink); }
 .nav-links a::after { content: ''; position: absolute; left: 0; right: 100%; bottom: -2px; height: 2px; background: var(--gradient-brand); border-radius: 2px; transition: right var(--transition); }
 .nav-links a:hover::after { right: 0; }
-.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-right { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 12px; min-width: 0; margin-left: auto; }
 .nav-cta { font-weight: 800; border: 2px solid var(--ink); padding: 10px 18px; border-radius: 999px; transition: background var(--transition), color var(--transition), transform var(--transition); }
 .nav-cta:hover { background: var(--ink); color: var(--soft); transform: translateY(-1px); }
 .nav-signout { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 10px 14px; font-weight: 850; cursor: pointer; transition: color var(--transition), box-shadow var(--transition); }
@@ -298,6 +298,13 @@ footer > a:last-child { font-weight: 900; color: var(--accent); }
   .hero, .split, .restaurant { grid-template-columns: 1fr; }
   .stats, .steps, .match-grid, .restaurant-cards, .value-prop-grid { grid-template-columns: 1fr 1fr; }
   .nav-links { display: none; }
+  /* Below this width brand+toggle+auth no longer reliably fit on one line
+     (long signed-in emails, long "Professional Networking" label), so the
+     toggle drops to its own full-width row instead of forcing horizontal
+     scroll on the whole page. */
+  .nav-right { order: 1; }
+  .nav-toggle { order: 2; flex: 1 1 100%; }
+  .nav-toggle button { flex: 1; }
 }
 @media (max-width: 680px) {
   .hero, .section { padding: 60px 18px; }
