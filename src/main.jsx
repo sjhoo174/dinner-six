@@ -406,6 +406,128 @@ function RejectedScreen({ retryAt, checking, onCheck, onSignOut }) {
   );
 }
 
+function BannedScreen({ onSignOut }) {
+  return (
+    <section className="section pending-panel">
+      <div className="pending-card">
+        <p className="eyebrow">Account suspended</p>
+        <h2>Your account has been suspended.</h2>
+        <p>
+          This happens automatically once a diner receives 3 reports from 3 different tablemates within their
+          last 3 successfully matched tables. If you think this was a mistake, please contact support.
+        </p>
+        <div className="pending-actions">
+          <button className="button secondary" onClick={onSignOut}>Sign out</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Up/down voting and reporting for a diner's tablemates. Voting only opens on
+// the diner's LATEST successfully matched group; reporting opens on any
+// successfully matched group (one report chance per group).
+function VotingPanel({ match, token, user, push }) {
+  const [votes, setVotes] = useState({});
+  const [reported, setReported] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busyKey, setBusyKey] = useState(null);
+  const tablemates = match.group.filter(p => !p.isUser);
+  const canVote = match.groupCompleted && match.isLatestSuccessfulGroup;
+  const canReport = match.groupCompleted;
+  const credits = user?.downvoteCreditsAvailable ?? 0;
+
+  useEffect(() => {
+    if (!match.groupCompleted) return;
+    Promise.all([
+      canVote ? requestJson(`/votes/mine?groupId=${encodeURIComponent(match.groupId)}`, { token }) : Promise.resolve({ votes: [] }),
+      requestJson(`/reports/mine?groupId=${encodeURIComponent(match.groupId)}`, { token }),
+    ]).then(([voteData, reportData]) => {
+      const map = {};
+      (voteData.votes || []).forEach(v => { map[v.voteeRegistrationId] = v.direction; });
+      setVotes(map);
+      setReported(reportData.report?.reportedRegistrationId || null);
+    }).finally(() => setLoaded(true));
+  }, [match.groupId, match.groupCompleted, canVote, token]);
+
+  if (!match.groupCompleted) return null;
+
+  async function castVote(registrationId, direction) {
+    setBusyKey(`${registrationId}:${direction}`);
+    try {
+      await requestJson('/votes', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, voteeRegistrationId: registrationId, direction }) });
+      setVotes(prev => ({ ...prev, [registrationId]: direction }));
+      push(direction === 'up' ? 'Upvoted.' : 'Downvoted.', 'success');
+    } catch (err) {
+      push(err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function fileReport(registrationId) {
+    if (!window.confirm('Report this tablemate? You only get one report chance per successfully matched table.')) return;
+    setBusyKey(`${registrationId}:report`);
+    try {
+      const data = await requestJson('/reports', { token, method: 'POST', body: JSON.stringify({ groupId: match.groupId, reportedRegistrationId: registrationId }) });
+      setReported(registrationId);
+      push(data.banned ? 'Report filed. This diner has been banned from the platform.' : 'Report filed.', 'success');
+    } catch (err) {
+      push(err.message);
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="voting-panel">
+      <h3>Rate your tablemates</h3>
+      <p>
+        {canVote
+          ? `Up or down vote the people from this table. You have ${credits} down-vote credit${credits === 1 ? '' : 's'} available.`
+          : 'Voting is only open on your most recently completed table.'}
+      </p>
+      {!loaded && <p className="pending-note">Loading…</p>}
+      {loaded && tablemates.map(p => (
+        <div className="voting-row" key={p.registrationId}>
+          <span>{p.name}</span>
+          <div className="voting-actions">
+            {canVote && (
+              <>
+                <button
+                  type="button"
+                  className={`vote-button up ${votes[p.registrationId] === 'up' ? 'active' : ''}`}
+                  disabled={Boolean(votes[p.registrationId]) || busyKey === `${p.registrationId}:up`}
+                  onClick={() => castVote(p.registrationId, 'up')}
+                >👍</button>
+                <button
+                  type="button"
+                  className={`vote-button down ${votes[p.registrationId] === 'down' ? 'active' : ''}`}
+                  disabled={Boolean(votes[p.registrationId]) || busyKey === `${p.registrationId}:down` || credits <= 0}
+                  title={credits > 0 ? 'Down vote' : 'No down-vote credits available'}
+                  onClick={() => castVote(p.registrationId, 'down')}
+                >👎</button>
+              </>
+            )}
+            {canReport && (
+              reported === p.registrationId ? (
+                <span className="report-filed">🚩 Reported</span>
+              ) : (
+                <button
+                  type="button"
+                  className="report-button"
+                  disabled={Boolean(reported) || busyKey === `${p.registrationId}:report`}
+                  onClick={() => fileReport(p.registrationId)}
+                >🚩 Report</button>
+              )
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function GuestList({ group }) {
   return (
     <div className="guest-list">
@@ -432,21 +554,25 @@ function GuestList({ group }) {
   );
 }
 
-function ConfirmedScreen({ match, token, push, onSignOut, onUnmatched }) {
+function ConfirmedScreen({ match, token, user, push, onSignOut, onUnmatched, canRegisterAgain, onRegisterAgain }) {
   return (
     <div className="confirmed-screen">
       <div className="confirmed-inner">
         <div className="confirmed-icon">🍽️</div>
-        <h2>You're confirmed!</h2>
+        <h2>{match.groupCompleted ? 'Your table happened!' : "You're confirmed!"}</h2>
         <p>See you at <strong>{match.restaurant.name}</strong> in {match.restaurant.area}.</p>
         <p className="confirmed-perk">✨ {match.restaurant.perk}</p>
         <EventCountdown eventAt={match.eventAt} eventEndsAt={match.eventEndsAt} />
-        <AttendanceSelector match={match} token={token} push={push} onUnmatched={onUnmatched} />
+        {!match.groupCompleted && <AttendanceSelector match={match} token={token} push={push} onUnmatched={onUnmatched} />}
         <div className="confirmed-guests">
           <h3>Who's coming</h3>
           <GuestList group={match.group} />
         </div>
         <RatingPanel match={match} token={token} push={push} />
+        <VotingPanel match={match} token={token} user={user} push={push} />
+        {canRegisterAgain && (
+          <button className="button primary" onClick={onRegisterAgain}>Register for a new table</button>
+        )}
         <button className="button secondary" onClick={onSignOut}>Sign out</button>
       </div>
     </div>
@@ -641,6 +767,10 @@ function deriveTrackState(reg) {
   if (!reg) return { appState: 'form', matchData: null };
   if (reg.status === 'matched') return { appState: 'matched', matchData: reg.match };
   if (reg.status === 'confirmed') return { appState: 'confirmed', matchData: reg.match };
+  // 'completed' means the group survived past its event start time — the
+  // registration itself is done (free to register again), but the same
+  // screen keeps showing so ratings/voting/reporting stay available.
+  if (reg.status === 'completed') return { appState: 'confirmed', matchData: reg.match };
   if (reg.status === 'rejected') {
     const retryAt = reg.rejectedAt ? new Date(reg.rejectedAt).getTime() + REJECT_COOLDOWN_MS : 0;
     return Date.now() < retryAt ? { appState: 'rejected', matchData: null } : { appState: 'form', matchData: null };
@@ -657,6 +787,7 @@ function App() {
   const [formLoading, setFormLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [dinnerType, setDinnerType] = useState('social');
+  const [forceForm, setForceForm] = useState(false);
   const { messages, push } = useToast();
   const dinnerTypeCopy = DINNER_TYPES[dinnerType];
 
@@ -664,8 +795,11 @@ function App() {
   // reject lifecycle; the toggle just selects which track is on screen.
   const activeRegistration = registrations[dinnerType];
   const track = deriveTrackState(activeRegistration);
-  const appState = authStage === 'ready' ? track.appState : authStage;
+  const appState = authStage === 'ready' ? (forceForm ? 'form' : track.appState) : authStage;
   const matchData = track.matchData;
+  const banned = authStage === 'ready' && Boolean(user?.banned);
+
+  useEffect(() => { setForceForm(false); }, [dinnerType]);
 
   const previewMatch = {
     compatibility: 91,
@@ -732,6 +866,7 @@ function App() {
       const data = await requestJson('/registrations', { token: authToken, method: 'POST', body: JSON.stringify(form) });
       setRegistrations(prev => ({ ...prev, [form.dinnerType]: data.registration }));
       setDinnerType(form.dinnerType);
+      setForceForm(false);
       push('Registration submitted. It is now tagged to your signed-in email.', 'success');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return true;
@@ -812,9 +947,10 @@ function App() {
         </div>
       </nav>
 
-      {appState === 'loading' && <section className="section pending-panel"><div className="pending-card"><h2>Loading DinnerSix…</h2></div></section>}
-      {appState === 'pending' && <PendingScreen user={user} registration={activeRegistration} checking={checkingStatus} onCheck={() => loadStatus(authToken, { manual: true })} onSignOut={signOut} />}
-      {appState === 'rejected' && (
+      {banned && <BannedScreen onSignOut={signOut} />}
+      {!banned && appState === 'loading' && <section className="section pending-panel"><div className="pending-card"><h2>Loading DinnerSix…</h2></div></section>}
+      {!banned && appState === 'pending' && <PendingScreen user={user} registration={activeRegistration} checking={checkingStatus} onCheck={() => loadStatus(authToken, { manual: true })} onSignOut={signOut} />}
+      {!banned && appState === 'rejected' && (
         <RejectedScreen
           retryAt={activeRegistration?.rejectedAt ? new Date(activeRegistration.rejectedAt).getTime() + REJECT_COOLDOWN_MS : Date.now()}
           checking={checkingStatus}
@@ -822,14 +958,23 @@ function App() {
           onSignOut={signOut}
         />
       )}
-      {appState === 'matched' && matchData && (
+      {!banned && appState === 'matched' && matchData && (
         <MatchSection match={matchData} registrationId={activeRegistration?.id} token={authToken} onConfirm={handleConfirmed} onReject={handleReject} push={push} />
       )}
-      {appState === 'confirmed' && matchData && (
-        <ConfirmedScreen match={matchData} token={authToken} push={push} onSignOut={signOut} onUnmatched={() => loadStatus(authToken)} />
+      {!banned && appState === 'confirmed' && matchData && (
+        <ConfirmedScreen
+          match={matchData}
+          token={authToken}
+          user={user}
+          push={push}
+          onSignOut={signOut}
+          onUnmatched={() => loadStatus(authToken)}
+          canRegisterAgain={activeRegistration?.status === 'completed'}
+          onRegisterAgain={() => setForceForm(true)}
+        />
       )}
 
-      {(appState === 'signedOut' || appState === 'form') && (
+      {!banned && (appState === 'signedOut' || appState === 'form') && (
         <>
           <section className="hero" id="top">
             <div className="hero-copy">
