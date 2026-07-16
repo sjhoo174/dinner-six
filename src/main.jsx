@@ -122,7 +122,11 @@ async function requestJson(path, { token, ...options } = {}) {
     },
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || data.message || 'Request failed');
+  if (!res.ok) {
+    const err = new Error(data.error || data.message || 'Request failed');
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
@@ -434,7 +438,7 @@ function RatingPanel({ match, token, push }) {
       {!loaded && <p className="pending-note">Loading…</p>}
       {loaded && tablemates.map(p => (
         <div className="rating-row" key={p.registrationId}>
-          <span>{p.name}{p.dinerCode ? ` · ${p.dinerCode}` : ''}</span>
+          <span className="rating-name">{p.name}{p.dinerCode && <span className="diner-code">{p.dinerCode}</span>}</span>
           <div className="rating-actions">
             {canRate && (
               ratings[p.registrationId] != null ? (
@@ -462,15 +466,33 @@ function RatingPanel({ match, token, push }) {
   );
 }
 
+// Simple, gender-differentiated avatar icons — a shared head silhouette with
+// a shape-coded body (flared for female, straight for male), the same
+// convention used by standard restroom pictograms, rather than color-coding.
+// Falls back to a neutral silhouette when gender is unset.
+function GenderAvatar({ gender }) {
+  const bodyPath = gender === 'Female'
+    ? 'M9 13.5h6l2.4 8.5H6.6z'
+    : gender === 'Male'
+      ? 'M8.5 13.5h7a1.5 1.5 0 0 1 1.5 1.5v7H7v-7a1.5 1.5 0 0 1 1.5-1.5z'
+      : 'M8 13.5h8l1.5 8.5H6.5z';
+  return (
+    <svg className="guest-avatar-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="7.5" r="4" fill="currentColor" />
+      <path d={bodyPath} fill="currentColor" />
+    </svg>
+  );
+}
+
 function GuestList({ group }) {
   return (
     <div className="guest-list">
       {group.map(p => (
         <article key={p.registrationId} className={p.isUser ? 'you' : ''}>
-          <div className="guest-avatar">{p.isUser ? 'You' : p.name[0]}</div>
+          <div className="guest-avatar"><GenderAvatar gender={p.gender} /></div>
           <div>
-            <h4>{p.name} {p.dinerCode && <span className="diner-code">{p.dinerCode}</span>}</h4>
-            <p>{p.persona} · {p.industry} · {p.gender}</p>
+            <h4 className="guest-name"><span>{p.name}{p.isUser ? ' (You)' : ''}</span>{p.dinerCode && <span className="diner-code">{p.dinerCode}</span>}</h4>
+            <p>{p.persona} · {p.industry}</p>
             <span>{p.vibe} · {p.energy}</span>
             {p.networkingGoal && <span className="networking-goal">🎯 {p.networkingGoal}</span>}
             {!p.isUser && p.attendanceStatus === 'not_showing' && (
@@ -577,18 +599,72 @@ function MatchSection({ match, registrationId, token, onConfirm, onReject, push 
   );
 }
 
-function SignupForm({ user, onSubmit, loading, defaultDinnerType }) {
+function SignupForm({ user, token, onSubmit, loading, defaultDinnerType, push }) {
   const [form, setForm] = useState(() => ({ ...initialForm, dinnerType: defaultDinnerType || 'social' }));
   const [step, setStep] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
   const turnstileRef = useRef(null);
   const widgetIdRef = useRef(null);
 
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [phoneVerifyError, setPhoneVerifyError] = useState('');
+  const [verificationUnavailable, setVerificationUnavailable] = useState(false);
+
+  function updatePhone(value) {
+    update('phone', value);
+    setPhoneVerified(false);
+    setCodeSent(false);
+    setCode('');
+    setPhoneVerifyError('');
+  }
+
+  async function sendPhoneCode() {
+    if (!form.phone) return;
+    setPhoneVerifyError('');
+    setSendingCode(true);
+    try {
+      await requestJson('/phone/send-code', { token, method: 'POST', body: JSON.stringify({ phone: form.phone }) });
+      setCodeSent(true);
+      push?.('Verification code sent.', 'success');
+    } catch (err) {
+      if (err.status === 503) setVerificationUnavailable(true);
+      else setPhoneVerifyError(err.message);
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
+  async function verifyPhoneCode() {
+    if (!code) return;
+    setPhoneVerifyError('');
+    setVerifyingCode(true);
+    try {
+      await requestJson('/phone/verify-code', { token, method: 'POST', body: JSON.stringify({ phone: form.phone, code }) });
+      setPhoneVerified(true);
+      push?.('Phone number verified.', 'success');
+    } catch (err) {
+      setPhoneVerifyError(err.message);
+    } finally {
+      setVerifyingCode(false);
+    }
+  }
+
   function update(name, value) { setForm(p => ({ ...p, [name]: value })); }
   function toggleTopic(t) {
     setForm(p => ({ ...p, topics: p.topics.includes(t) ? p.topics.filter(x => x !== t) : [...p.topics, t].slice(-5) }));
   }
-  function next(e) { e.preventDefault(); setStep(s => Math.min(s + 1, STEPS.length - 1)); }
+  function next(e) {
+    e.preventDefault();
+    if (step === 0 && !verificationUnavailable && !phoneVerified) {
+      setPhoneVerifyError('Please verify your phone number before continuing.');
+      return;
+    }
+    setStep(s => Math.min(s + 1, STEPS.length - 1));
+  }
   function back() { setStep(s => Math.max(s - 1, 0)); }
 
   function resetTurnstile() {
@@ -642,7 +718,28 @@ function SignupForm({ user, onSubmit, loading, defaultDinnerType }) {
         {step === 0 && (
           <div className="form-step">
             <label>Full name<input value={form.name} onChange={e => update('name', e.target.value)} placeholder="Your name" required /></label>
-            <label>Phone number<input type="tel" value={form.phone} onChange={e => update('phone', e.target.value)} placeholder="+65 9123 4567" required /></label>
+            <div className="phone-verify">
+              <label>Phone number
+                <div className="phone-verify-row">
+                  <input type="tel" value={form.phone} onChange={e => updatePhone(e.target.value)} placeholder="+65 9123 4567" required disabled={phoneVerified} />
+                  {!phoneVerified && (
+                    <button type="button" className="button secondary" onClick={sendPhoneCode} disabled={!form.phone || sendingCode}>
+                      {sendingCode ? 'Sending…' : codeSent ? 'Resend code' : 'Send code'}
+                    </button>
+                  )}
+                  {phoneVerified && <span className="phone-verified-badge">✓ Verified</span>}
+                </div>
+              </label>
+              {codeSent && !phoneVerified && (
+                <div className="phone-verify-row">
+                  <input type="text" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={e => setCode(e.target.value)} placeholder="6-digit code" maxLength={6} />
+                  <button type="button" className="button secondary" onClick={verifyPhoneCode} disabled={!code || verifyingCode}>
+                    {verifyingCode ? 'Verifying…' : 'Verify'}
+                  </button>
+                </div>
+              )}
+              {phoneVerifyError && <p className="field-error">{phoneVerifyError}</p>}
+            </div>
             <label>Gender<select value={form.gender} onChange={e => update('gender', e.target.value)}>{['Female','Male'].map(x => <option key={x}>{x}</option>)}</select></label>
             <label>Age<input type="number" min="18" max="80" value={form.age} onChange={e => update('age', e.target.value)} required /></label>
             <label>Industry<select value={form.industry} onChange={e => update('industry', e.target.value)}>{['Tech','Finance','Product','Design','Marketing','Healthcare','Education','Law','Hospitality','Engineering','Founder','Student'].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -958,7 +1055,7 @@ function App() {
               <h2>{user ? dinnerTypeCopy.registerHeadline : 'Continue with Google.'}</h2>
               <p>{user ? dinnerTypeCopy.registerBody : 'Use Google sign-in before the registration form is shown.'}</p>
             </div>
-            {user ? <SignupForm key={dinnerType} user={user} onSubmit={handleFormSubmit} loading={formLoading} defaultDinnerType={dinnerType} /> : <SignInPanel />}
+            {user ? <SignupForm key={dinnerType} user={user} token={authToken} push={push} onSubmit={handleFormSubmit} loading={formLoading} defaultDinnerType={dinnerType} /> : <SignInPanel />}
           </section>
 
           <section className="section restaurant">
